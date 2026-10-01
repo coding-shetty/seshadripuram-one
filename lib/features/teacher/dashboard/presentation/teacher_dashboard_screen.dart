@@ -1,20 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/dashboard_components.dart';
+import '../../../auth/presentation/auth_providers.dart';
 
-class TeacherDashboardScreen extends StatelessWidget {
+class TeacherDashboardScreen extends ConsumerWidget {
   const TeacherDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final displayName = user?.name.isNotEmpty == true ? user!.name : 'Faculty';
+    final roleSubtitle = user != null ? 'Teacher • ${user.institutionId}' : 'Tuesday, 22 August 2026';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'T';
+
     return DashboardShell(
       title: 'Teacher workspace',
-      subtitle: 'Tuesday, 22 August 2026',
+      subtitle: roleSubtitle,
       actions: [
-        IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none), tooltip: 'Notifications'),
-        const CircleAvatar(backgroundColor: AppColors.gold500, child: Text('T', style: TextStyle(color: AppColors.navy950, fontWeight: FontWeight.w800))),
+        IconButton(
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notifications coming soon')),
+            );
+          },
+          icon: const Icon(Icons.notifications_none),
+          tooltip: 'Notifications',
+        ),
+        CircleAvatar(
+          backgroundColor: AppColors.gold500,
+          child: Text(initial, style: const TextStyle(color: AppColors.navy950, fontWeight: FontWeight.w800)),
+        ),
       ],
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Card(
@@ -25,7 +43,7 @@ class TeacherDashboardScreen extends StatelessWidget {
               const Icon(Icons.auto_awesome, color: AppColors.gold300, size: 30),
               const SizedBox(width: AppSpacing.md),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Good morning, Dr. Rao', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
+                Text('Good morning, $displayName', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white)),
                 const SizedBox(height: 4),
                 const Text('Keep today’s classes moving smoothly.', style: TextStyle(color: Colors.white70)),
               ])),
@@ -34,12 +52,12 @@ class TeacherDashboardScreen extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         const Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-          SizedBox(width: 180, child: StatCard(label: 'Classes today', value: '3', icon: Icons.class_outlined, accent: AppColors.gold500)),
-          SizedBox(width: 180, child: StatCard(label: 'Pending reviews', value: '2', icon: Icons.rate_review_outlined, accent: AppColors.warning)),
+          SizedBox(width: 180, child: StatCard(label: 'Classes today (Demo data)', value: '3', icon: Icons.class_outlined, accent: AppColors.gold500)),
+          SizedBox(width: 180, child: StatCard(label: 'Pending reviews (Demo data)', value: '2', icon: Icons.rate_review_outlined, accent: AppColors.warning)),
         ]),
         const SizedBox(height: AppSpacing.xl),
         const DashboardSection(
-          title: 'Today’s classes',
+          title: 'Today’s classes (Demo data)',
           child: Column(children: [
             ScheduleCard(time: '09:00', subject: 'BCA 4A • Web Technology', meta: 'Room 204 • 38 students'),
             SizedBox(height: AppSpacing.sm),

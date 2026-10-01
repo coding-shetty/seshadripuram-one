@@ -43,7 +43,17 @@ class DemoFeatureScreen extends StatelessWidget {
     return DashboardShell(
       title: title,
       subtitle: 'Seshadripuram One • Preview workspace',
-      actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none), tooltip: 'Notifications')],
+      actions: [
+        IconButton(
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notifications coming soon')),
+            );
+          },
+          icon: const Icon(Icons.notifications_none),
+          tooltip: 'Notifications',
+        ),
+      ],
       child: _FeatureContent(feature: feature, icon: icon),
     );
   }
@@ -58,6 +68,7 @@ class _FeatureContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const DemoDataBanner(),
       Card(
         color: AppColors.navy900,
         child: Padding(
