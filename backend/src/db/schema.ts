@@ -36,7 +36,10 @@ export const auditLogs = sqliteTable("audit_logs", {
   action: text("action").notNull(),
   details: text("details"),
   timestamp: text("timestamp").default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => [
+  index("audit_logs_action_idx").on(table.action),
+  index("audit_logs_timestamp_idx").on(table.timestamp),
+]);
 
 export const otpSessions = sqliteTable("otp_sessions", {
   institutionId: text("institution_id").primaryKey(),
@@ -52,7 +55,10 @@ export const activationGrants = sqliteTable("activation_grants", {
   expiresAt: integer("expires_at").notNull(),
   usedAt: integer("used_at"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("activation_grants_user_id_idx").on(table.userId)]);
+}, (table) => [
+  index("activation_grants_user_id_idx").on(table.userId),
+  index("activation_grants_expires_at_idx").on(table.expiresAt),
+]);
 
 export const authSessions = sqliteTable("auth_sessions", {
   id: text("id").primaryKey(),
@@ -61,7 +67,11 @@ export const authSessions = sqliteTable("auth_sessions", {
   expiresAt: integer("expires_at").notNull(),
   revokedAt: integer("revoked_at"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("auth_sessions_user_id_idx").on(table.userId)]);
+}, (table) => [
+  index("auth_sessions_user_id_idx").on(table.userId),
+  index("auth_sessions_expires_at_idx").on(table.expiresAt),
+  index("auth_sessions_revoked_at_idx").on(table.revokedAt),
+]);
 
 
 export const institutions = sqliteTable('institutions', {
@@ -205,6 +215,7 @@ export const importJobs = sqliteTable('import_jobs', {
 }, (table) => [
   index('import_jobs_actor_idx').on(table.actorUserId),
   index('import_jobs_created_idx').on(table.createdAt),
+  index('import_jobs_status_idx').on(table.status),
 ]);
 
 

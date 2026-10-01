@@ -2,7 +2,18 @@ import { eq } from "drizzle-orm";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../src/db";
-import { activationGrants, auditLogs, authSessions, otpSessions, students, teachers, users } from "../src/db/schema";
+import {
+  activationGrants,
+  auditLogs,
+  authSessions,
+  enrollments,
+  otpSessions,
+  students,
+  teachers,
+  teachingAssignments,
+  timetableEntries,
+  users,
+} from "../src/db/schema";
 import { createApp } from "../src/index";
 
 const app = createApp();
@@ -42,6 +53,9 @@ beforeEach(async () => {
   await db.delete(activationGrants);
   await db.delete(otpSessions);
   await db.delete(auditLogs);
+  await db.delete(enrollments);
+  await db.delete(teachingAssignments);
+  await db.delete(timetableEntries);
   await db.delete(students);
   await db.delete(teachers);
   await db.delete(users);

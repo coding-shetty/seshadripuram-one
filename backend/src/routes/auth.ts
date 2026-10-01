@@ -91,21 +91,23 @@ async function resolveProfileIdentity(
     };
   }
 
-  if (!user) {
+  if (!user && persist) {
     const userId = randomUUID();
-    await db.insert(users).values({
-      id: userId,
-      role,
-      institutionId,
-      contactEmail: profile.contactEmail,
-      accountStatus: "PRE_PROVISIONED",
-      isActive: profile.isActive,
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: userId,
+        role,
+        institutionId,
+        contactEmail: profile.contactEmail,
+        accountStatus: "PRE_PROVISIONED",
+        isActive: profile.isActive,
+      });
+      if (role === "STUDENT") {
+        await tx.update(students).set({ userId }).where(eq(students.studentId, institutionId));
+      } else {
+        await tx.update(teachers).set({ userId }).where(eq(teachers.employeeId, institutionId));
+      }
     });
-    if (role === "STUDENT") {
-      await db.update(students).set({ userId }).where(eq(students.studentId, institutionId));
-    } else {
-      await db.update(teachers).set({ userId }).where(eq(teachers.employeeId, institutionId));
-    }
     user = await db.select().from(users).where(eq(users.id, userId)).get();
   }
   if (!user) return null;
@@ -302,9 +304,14 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
       return res.status(400).json({ error: "Account is not eligible for activation" });
     }
     const activationGrant = createOpaqueToken();
-    await db.delete(otpSessions).where(eq(otpSessions.institutionId, institutionId));
-    await db.insert(activationGrants).values({
-      id: randomUUID(), userId: identity.userId, tokenHash: hashOpaqueToken(activationGrant), expiresAt: Date.now() + grantExpiryMs,
+    await db.transaction(async (tx) => {
+      await tx.delete(otpSessions).where(eq(otpSessions.institutionId, institutionId));
+      await tx.insert(activationGrants).values({
+        id: randomUUID(),
+        userId: identity.userId,
+        tokenHash: hashOpaqueToken(activationGrant),
+        expiresAt: Date.now() + grantExpiryMs,
+      });
     });
     await audit("OTP_VERIFIED", `Activation OTP verified for ${identity.userId}`);
     return res.json({ activationGrant, expiresInSeconds: grantExpiryMs / 1000 });
@@ -373,8 +380,22 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
     }
     const identity = await resolveIdentity(user.institutionId);
     if (!identity) return res.status(401).json({ error: "Session is no longer valid" });
-    await db.update(authSessions).set({ revokedAt: Date.now() }).where(eq(authSessions.id, session.id));
-    return res.json(await createSession(identity));
+    const newSession = await db.transaction(async (tx) => {
+      await tx.update(authSessions).set({ revokedAt: Date.now() }).where(eq(authSessions.id, session.id));
+      const refreshToken = createOpaqueToken();
+      await tx.insert(authSessions).values({
+        id: randomUUID(),
+        userId: identity.userId,
+        refreshTokenHash: hashOpaqueToken(refreshToken),
+        expiresAt: Date.now() + refreshExpiryMs,
+      });
+      return {
+        accessToken: createAccessToken({ sub: identity.userId, role: identity.role, institutionId: identity.institutionId }),
+        refreshToken,
+        user: publicUser(identity),
+      };
+    });
+    return res.json(newSession);
   });
 
   router.post("/logout", async (req, res) => {
