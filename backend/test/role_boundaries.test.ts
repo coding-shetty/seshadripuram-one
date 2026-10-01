@@ -13,9 +13,6 @@ import {
   announcements,
   importJobs,
   institutions,
-  departments,
-  classes,
-  sections,
 } from '../src/db/schema';
 import { createApp } from '../src';
 import { createAccessToken } from '../src/services/tokenService';
