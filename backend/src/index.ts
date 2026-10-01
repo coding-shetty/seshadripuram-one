@@ -10,6 +10,7 @@ import { adminRouter } from './routes/admin';
 import { createAuthRouter, type AuthRouterOptions } from './routes/auth';
 
 import { logger, requestLoggerMiddleware } from './utils/logger';
+import { centralErrorHandler } from './utils/errors';
 
 export interface AppOptions extends AuthRouterOptions {}
 
@@ -63,36 +64,13 @@ export function createApp(options: AppOptions = {}) {
     }
   });
 
-  app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+  app.use((_req, res) => {
+    const requestId = (res.locals.requestId as string | undefined) || 'unknown';
+    res.status(404).json({ code: 'NOT_FOUND', message: 'Not found', requestId, error: 'Not found' });
+  });
 
   // Centralized error handling
-  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const requestId = res.locals.requestId as string | undefined;
-
-    // 1. Malformed JSON payload from body-parser
-    if (error instanceof SyntaxError && 'status' in error && error.status === 400 && 'body' in error) {
-      return res.status(400).json({ error: 'Malformed JSON payload' });
-    }
-
-    // 2. Payload size exceeded from body-parser
-    if (
-      error &&
-      typeof error === 'object' &&
-      (('type' in error && error.type === 'entity.too.large') ||
-        ('status' in error && error.status === 413) ||
-        ('name' in error && error.name === 'PayloadTooLargeError'))
-    ) {
-      return res.status(413).json({ error: 'Payload too large. Request body exceeds the allowed size limit.' });
-    }
-
-    // 3. Fallback internal server error (never leak internal details or stack traces)
-    console.error(JSON.stringify({
-      event: 'unhandled_request_error',
-      requestId,
-      message: error instanceof Error ? error.message : 'Unknown error',
-    }));
-    return res.status(500).json({ error: 'Internal server error', requestId });
-  });
+  app.use(centralErrorHandler);
 
   return app;
 }
