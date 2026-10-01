@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../src/db";
 import {
   activationGrants,
+  announcements,
   auditLogs,
   authSessions,
   enrollments,
+  importJobs,
   otpSessions,
   students,
   teachers,
@@ -53,6 +55,8 @@ beforeEach(async () => {
   await db.delete(activationGrants);
   await db.delete(otpSessions);
   await db.delete(auditLogs);
+  await db.delete(importJobs);
+  await db.delete(announcements);
   await db.delete(enrollments);
   await db.delete(teachingAssignments);
   await db.delete(timetableEntries);
