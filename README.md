@@ -25,23 +25,18 @@ Bringing academic communication, student information, and teacher workflows into
 - [Current Status](#-current-status)
 - [Architecture](#️-architecture)
 - [Technology Stack](#️-technology-stack)
-- [Authentication Architecture](#-authentication-architecture)
-- [Role-Based Access Control](#-role-based-access-control)
+- [Authentication & OTP Architecture](#-authentication--otp-architecture)
+- [Role-Based Access Control & Tenant Scoping](#-role-based-access-control--tenant-scoping)
 - [Security Principles](#️-security-principles)
-- [OTP Security](#-otp-security)
-- [Database](#️-database)
+- [Database Schema & Migrations](#️-database-schema--migrations)
+- [API Reference](#-api-reference)
 - [Project Structure](#-project-structure)
-- [Authentication API](#-authentication-api)
-- [Deployment Architecture](#-deployment-architecture)
 - [Environment Configuration](#-environment-configuration)
-- [Testing](#-testing)
+- [Testing & Quality Verification](#-testing--quality-verification)
 - [Local Development](#️-local-development)
-- [Roadmap](#️-roadmap)
-- [Project Maturity](#-project-maturity)
-- [Current Limitations](#️-current-limitations)
+- [Android Emulator Setup](#-android-emulator-setup)
+- [Roadmap & Maturity](#️-roadmap--maturity)
 - [Security Policy](#-security)
-- [Development Philosophy](#-development-philosophy)
-- [Project Status](#-project-status)
 ---
  
 ## ✨ Vision
@@ -49,13 +44,14 @@ Bringing academic communication, student information, and teacher workflows into
 College communication today is often spread across:
  
 - WhatsApp groups
-- PDFs
+- PDFs and printed circulars
 - Spreadsheets
-- Notice boards
-- Separate attendance systems
-- Disconnected portals
-- Personal messages between students and staff
-**Seshadripuram One** brings all of these academic workflows into a single, secure platform.
+- Physical notice boards
+- Standalone attendance systems
+- Disconnected student portals
+- Unofficial personal messages between students and faculty
+ 
+**Seshadripuram One** unifies these academic workflows into a single, secure platform.
  
 > ### One app. One identity. One academic ecosystem.
  
@@ -63,26 +59,30 @@ College communication today is often spread across:
  
 ## 🚀 Current Status
  
-The project is currently in **Phase 3 — Authentication & Authorization Foundation**.
+The project has completed its **Core Authentication & Reliability Foundation** (Phase 3) along with foundational implementations for **Academic Data Scoping** (Phase 4) and **Administrative Bulk Imports** (Phase 8).
  
 <table>
 <tr><td>
-- 🔐 Secure account activation
-- 📱 OTP verification architecture
-- 🎫 JWT access-token authentication
-- 🔄 Rotating refresh sessions
-- 👨‍🎓 Student role handling
-- 👨‍🏫 Teacher role handling
+<b>Implemented Backend Capabilities:</b><br>
+- 🔐 Secure account activation (read-only until verified)<br>
+- 📧 Multi-provider OTP delivery (Console log + Resend email)<br>
+- 🎫 JWT access tokens (15m expiry) with rotatable refresh sessions (30d expiry)<br>
+- 🏢 Strict multi-tenant data scoping across institutions & sections<br>
+- 🛡️ Granular IP + Institution rate limiting for auth endpoints<br>
+- 📥 Admin CSV/JSON import preview with DB conflict detection<br>
+- 🔒 Atomic batch commits with immediate payload PII purging<br>
+- 🛡️ Trusted proxy configuration and body size limits (32kb global, 5mb imports)
 </td><td>
-- 🛡️ Admin role foundation
-- 🔒 Server-side authorization
-- 🗄️ Turso + Drizzle database foundation
-- 📦 Database migrations
-- 🔑 Secure Flutter token storage
-- 🧪 Backend & Flutter authentication tests
+<b>Implemented Flutter Client Capabilities:</b><br>
+- 🔄 Resilient AuthInterceptor (single in-flight 401 refresh queue & retry)<br>
+- 🧭 Stable GoRouter navigation using reactive refreshListenable<br>
+- 👤 Dynamic dashboards consuming real user profiles from <code>/api/auth/me</code><br>
+- 🚪 Working logout flow (clears secure storage and invalidates server session)<br>
+- 📅 Live timetable & announcements feeds scoped to student/faculty<br>
+- 🏷️ Explicit Demo Data badges and banners on simulated preview screens<br>
+- 📱 Debug cleartext network config for local Android emulator workflows
 </td></tr>
 </table>
-> **Note:** This is an actively developed project. Academic modules such as attendance, marks, assignments, notes, timetable, and announcements are planned for subsequent phases.
  
 ---
  
@@ -91,32 +91,34 @@ The project is currently in **Phase 3 — Authentication & Authorization Foundat
 ```text
                     ┌─────────────────────────┐
                     │     Seshadripuram One   │
-                    │      Flutter Client     │
+                    │   Flutter Client (App)  │
                     └────────────┬────────────┘
                                  │
-                                 │ HTTPS / REST API
+                                 │ HTTPS / JSON REST API
                                  ▼
                     ┌─────────────────────────┐
                     │      Express Backend    │
-                    │        TypeScript       │
+                    │       (TypeScript)      │
                     └────────────┬────────────┘
                                  │
-                ┌────────────────┼────────────────┐
-                │                │                │
-                ▼                ▼                ▼
-        ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-        │ Authentication│ │ Authorization│ │   Services   │
-        │     / OTP     │ │  JWT / Roles │ │ OTP / Tokens │
-        └──────────────┘ └──────────────┘ └──────────────┘
+     ┌───────────────────────────┼───────────────────────────┐
+     │                           │                           │
+     ▼                           ▼                           ▼
+┌──────────────┐          ┌──────────────┐            ┌──────────────┐
+│  Auth Router │          │Academic Router│           │ Admin Router │
+│  Rate Limits │          │Tenant Scoping│            │Import Purging│
+└──────┬───────┘          └──────┬───────┘            └──────┬───────┘
+       │                         │                           │
+       └─────────────────────────┼───────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │      Drizzle ORM        │
+                    │       Drizzle ORM       │
                     └────────────┬────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │       Turso / libSQL     │
+                    │      Turso / libSQL     │
                     └─────────────────────────┘
 ```
  
@@ -126,184 +128,127 @@ The project is currently in **Phase 3 — Authentication & Authorization Foundat
  
 ### Frontend
  
-| Technology | Purpose |
+| Technology | Version / Purpose |
 |---|---|
-| Flutter | Cross-platform application |
-| Dart | Application language |
-| Riverpod | State management |
-| GoRouter | Navigation |
-| Dio | HTTP networking |
-| Flutter Secure Storage | Token/session storage |
+| Flutter | Cross-platform mobile framework (SDK ^3.12.2) |
+| Dart | Language runtime |
+| Riverpod | Reactive state management (`flutter_riverpod: ^3.4.2`) |
+| GoRouter | Declarative routing with `refreshListenable` (`go_router: ^17.4.0`) |
+| Dio | HTTP client with queued refresh interceptor (`dio: ^5.11.0`) |
+| Flutter Secure Storage | Hardware-backed encrypted key/token storage (`^11.0.0`) |
  
 ### Backend
  
-| Technology | Purpose |
+| Technology | Version / Purpose |
 |---|---|
-| Node.js | Backend runtime |
-| Express | REST API |
-| TypeScript | Backend language |
-| Drizzle ORM | Database access |
-| Turso / libSQL | Production database |
-| bcrypt | Password hashing |
-| JWT | Access authentication |
-| Crypto-secure OTP | Account verification |
- 
-### DevOps
- 
-| Technology | Purpose |
-|---|---|
-| Git | Version control |
-| GitHub | Source control & collaboration |
-| Codemagic | Flutter CI/CD |
-| Environment Variables | Secret/configuration management |
+| Node.js / Express | Server runtime with Express 5 (`express: ^5.2.1`) |
+| TypeScript | Strongly-typed service and route implementation (`typescript: ^5.9.3`) |
+| Drizzle ORM | Type-safe SQL ORM and schema migration manager (`drizzle-orm: ^0.45.2`) |
+| Turso / libSQL | Edge SQLite database engine (`@libsql/client: ^0.17.4`) |
+| Zod | Request body and query parameter schema validation (`zod: ^4.6.5`) |
+| express-rate-limit | Granular IP + institution-keyed rate limiters (`^8.6.2`) |
+| bcrypt | Adaptive password hashing with work factor 12 (`bcrypt: ^6.0.0`) |
+| jsonwebtoken | Cryptographic JWT access & refresh token signing (`^9.0.3`) |
+| Resend | Production transactional email delivery for verification OTPs |
  
 ---
  
-## 🔐 Authentication Architecture
+## 🔐 Authentication & OTP Architecture
  
-Security is a core principle of Seshadripuram One. Users **do not** freely choose whether they are a student or teacher — the backend determines identity and role from the authoritative college records.
+Security is a core design principle: users **do not** freely pick their role or institute. Identity is strictly matched against authoritative institution records pre-loaded by administrators.
  
-### Account Activation
+### Account Activation Workflow
  
 ```text
-User
- │
- │ College / Institution ID
- ▼
-Backend
- │
- │ Search authoritative database
- ▼
-┌──────────────────────────┐
-│ Student / Teacher record │
-└────────────┬─────────────┘
-             │
-             │ Valid + Active
-             ▼
-        OTP Request
-             │
-             ▼
-      Verified Contact
-             │
-             ▼
-        Enter OTP
-             │
-             ▼
-      OTP Verification
-             │
-             ▼
-     Activation Grant
-             │
-             ▼
-       Set Password
-             │
-             ▼
-       Account Active
+Client                              Backend / DB                         Email / Console
+  │                                      │                                      │
+  │── 1. POST /request-activation ───────▶│                                      │
+  │      { institutionId }               │── Match student/teacher record       │
+  │                                      │   (Read-only: creates no users)      │
+  │                                      │── Generate 6-digit cryptographic OTP │
+  │                                      │── Dispatch OTP ─────────────────────▶│
+  │◀── 200 OK (OTP Sent) ────────────────│                                      │
+  │                                      │                                      │
+  │── 2. POST /verify-otp ───────────────▶│                                      │
+  │      { institutionId, otp }          │── Verify hashed OTP & attempt limit  │
+  │                                      │── Provision user & link profile      │
+  │                                      │── Issue single-use Activation Grant  │
+  │◀── 200 OK { activationGrant } ───────│                                      │
+  │                                      │                                      │
+  │── 3. POST /set-password ─────────────▶│                                      │
+  │      { grant, password }             │── Verify grant & hash password       │
+  │◀── 200 OK (Account Activated) ───────│                                      │
 ```
  
-### Subsequent Login
+### Subsequent Login & Session Lifecycle
  
-```text
-College ID + Password
-          │
-          ▼
-       Backend
-          │
-          ▼
-     Authentication
-          │
-          ▼
-   Access JWT + Refresh
-          │
-          ▼
-     Authenticated App
-```
+1. **Login:** `POST /api/auth/login` accepts `institutionId` and `password`. Returns short-lived JWT `accessToken` (15 minutes), long-lived `refreshToken` (30 days), and the user's role profile.
+2. **Access:** Client includes `Authorization: Bearer <accessToken>` in all API requests.
+3. **Automatic Refresh:** When an access token expires (HTTP 401), the Flutter `AuthInterceptor` holds concurrent requests, issues a single call to `POST /api/auth/refresh`, updates local secure storage, and retries the original requests.
+4. **Logout:** `POST /api/auth/logout` invalidates the server-side refresh session, wipes secure storage, and returns the app to the login screen.
  
 ---
  
-## 👥 Role-Based Access Control
+## 👥 Role-Based Access Control & Tenant Scoping
  
-Seshadripuram One enforces **server-side** role authorization — the client never decides permissions.
+Every academic query and mutation is strictly filtered by the caller's verified institution ID and role:
  
-<details open>
-<summary><b>👨‍🎓 Student</b></summary>
-Students will eventually be able to access:
- 
-- Announcements & class updates
-- Timetable
-- Attendance (overall & subject-wise) and absence history
-- Internal examination marks, SIM examination marks, project marks
-- Assignments & assignment attachments
-- Notes & study materials
-- Teacher updates
-Students **cannot** modify protected academic information.
-</details>
-<details>
-<summary><b>👨‍🏫 Teacher</b></summary>
-Teachers will eventually be able to:
- 
-- Publish announcements & class updates
-- Upload notes and academic materials
-- Create assignments and upload attachments
-- Enter and update attendance
-- Enter and update internal marks, SIM examination marks, project marks
-- Communicate academic information
-Teacher permissions are enforced entirely by the backend.
-</details>
-<details>
-<summary><b>👑 Administrator</b></summary>
-Administrators will manage controlled institutional data such as:
- 
-- Students, teachers, departments, subjects, sections
-- Academic years and semesters
-- Initial data imports
-Admin registration is **not** publicly available.
-</details>
----
- 
-## 🛡️ Security Principles
- 
-The Flutter application is treated as an **untrusted client**. The backend never blindly trusts values supplied by the app — it independently determines:
- 
-- User identity
-- Role
-- Institution ID
-- Department & section
-- Permissions
-- Resource ownership
-This design prevents attacks such as:
- 
-```text
-Student → Change role → Teacher                    ❌
-Student → Modify another student's marks            ❌
-Student → Modify attendance                          ❌
-User    → Activate unknown institution ID            ❌
-```
- 
-Authorization is enforced on the backend rather than relying on Flutter navigation guards.
+- **👨‍🎓 Student:** Can read only their own institution's announcements, their enrolled section's timetable, and their own academic records. Cannot publish announcements or modify attendance.
+- **👨‍🏫 Teacher:** Can read and publish announcements for their institution/department, view timetables for sections they teach, and mark attendance for their assigned classes.
+- **👑 Administrator:** Manages institution-wide configuration, reviews audit logs, executes bulk student/teacher imports, and manages academic departments.
  
 ---
  
-## 🔑 OTP Security
+## 🗄️ Database Schema & Migrations
  
-- Cryptographically secure OTP generation
-- Hashed OTP storage
-- Expiration & one-time use
-- Verification attempt limits
-- OTP invalidation after use
-- Request rate limiting
-- Development-only OTP delivery abstraction (production SMS/email provider to be connected later)
-> OTP values are never intended to be stored in the Flutter application.
+Managed with **Drizzle ORM** across 7 schema migrations:
+ 
+- **Identity & Auth:** `users`, `students`, `teachers`, `auth_sessions`, `otps`, `activation_grants`
+- **Institution Structure:** `institutions`, `departments`, `programs`, `courses`, `academic_years`, `semesters`, `sections`
+- **Academic Operations:** `enrollments`, `subject_offerings`, `teaching_assignments`, `timetable_entries`, `announcements`, `attendance_sessions`, `attendance_records`
+- **Data Imports & Retention:** `import_jobs` (tracks entity imports, preview validation, conflict reports, and PII purge timestamps)
  
 ---
  
-## 🗄️ Database
+## 🔌 API Reference
  
-Built on **Turso + libSQL + Drizzle ORM**, with a schema covering:
+All endpoints enforce strict Zod schema validation on request payloads and query parameters.
  
-`Users` · `Students` · `Teachers` · `Departments` · `Courses` · `Subjects` · `Academic Years` · `Semesters` · `Sections` · `Enrollments` · `Timetable` · `Attendance` · `Attendance Records` · `Announcements` · `Notes` · `Assignments` · `Assignment Submissions` · `Internal Marks` · `SIM Examination Marks` · `Project Marks` · `Audit Logs` · `Authentication Sessions` · `Activation Grants`
+### Authentication (`/api/auth`)
  
-The schema will continue to evolve as each academic feature is implemented.
+| Method | Endpoint | Rate Limit | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/request-activation` | 5 req / 15m (IP + Inst) | Starts activation; generates & dispatches 6-digit OTP (Console or Resend). |
+| `POST` | `/api/auth/verify-otp` | 10 req / 15m (IP + Inst) | Verifies OTP (max 5 attempts); provisions user row and returns activation grant. |
+| `POST` | `/api/auth/set-password` | Standard | Consumes activation grant and securely hashes password (min 12 chars). |
+| `POST` | `/api/auth/login` | 10 req / 15m (Account) | Validates credentials; returns access JWT, refresh token, and user profile. |
+| `POST` | `/api/auth/refresh` | 60 req / 15m | Rotates refresh session; returns new access JWT and new refresh token. |
+| `POST` | `/api/auth/logout` | Standard | Invalidate refresh token session on the server and clears active auth session. |
+| `GET` | `/api/auth/me` | 120 req / 15m | Returns authenticated caller's profile with real display name and verified role. |
+ 
+### Academic Feeds (`/api/academic`)
+ 
+| Method | Endpoint | Authorization | Description |
+|---|---|---|---|
+| `GET` | `/api/academic/announcements` | Student, Teacher, Admin | Fetches announcements scoped to caller's institution, role, and department. |
+| `POST` | `/api/academic/announcements` | Teacher, Admin | Publishes an announcement scoped to caller's institution. |
+| `GET` | `/api/academic/timetable` | Student, Teacher, Admin | Returns schedule scoped to caller's institution and class section or teacher assignment. |
+| `POST` | `/api/academic/attendance` | Teacher, Admin | Submits attendance session records for an assigned section offering. |
+ 
+### Administration & Data Import (`/api/admin`)
+ 
+| Method | Endpoint | Authorization | Description |
+|---|---|---|---|
+| `POST` | `/api/admin/imports/preview` | Admin | Ingests up to 5MB CSV/JSON data (`institutions`, `students`, `teachers`); validates schema and reports DB conflicts before commit. |
+| `POST` | `/api/admin/imports/:id/commit` | Admin | Executes atomic all-or-nothing database commit and immediately purges raw payload PII. |
+| `GET` | `/api/admin/imports/:id` | Admin | Fetches import job status, summary counters, and error diagnostics. |
+ 
+### Operational Endpoints
+ 
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness health check returning `{ status: "ok" }`. |
+| `GET` | `/ready` | Readiness check verifying active database connection. |
  
 ---
  
@@ -311,121 +256,74 @@ The schema will continue to evolve as each academic feature is implemented.
  
 ```text
 seshadripuram_one/
-│
-├── android/ ios/ linux/ macos/ windows/ web/
-│
 ├── lib/
 │   ├── core/
-│   │   ├── api/
-│   │   ├── config/
-│   │   ├── router/
-│   │   ├── storage/
-│   │   ├── theme/
-│   │   └── utils/
-│   │
+│   │   ├── api/             # Dio client & AuthInterceptor (401 refresh queue)
+│   │   ├── config/          # AppConfig & environment flags
+│   │   ├── router/          # GoRouter configuration & RouterAuthListenable
+│   │   ├── session/         # SessionExpiredNotifier
+│   │   ├── storage/         # SecureStorageService (flutter_secure_storage)
+│   │   ├── theme/           # AppColors, AppTypography, design tokens
+│   │   └── widgets/         # DashboardShell, DemoDataBanner, DemoFeatureScreen
 │   └── features/
-│       ├── auth/
-│       │   ├── data/
-│       │   ├── domain/
-│       │   └── presentation/
-│       ├── student/dashboard/
-│       ├── teacher/dashboard/
-│       └── admin/dashboard/
-│
+│       ├── auth/            # Login screen, AuthRepository, auth Riverpod providers
+│       ├── academic/        # Live Timetable & Announcements widgets & screens
+│       ├── student/         # Student dashboard screen
+│       ├── teacher/         # Teacher dashboard screen
+│       └── admin/           # Admin dashboard & AdminImportScreen
 ├── backend/
 │   ├── src/
-│   │   ├── config.ts
-│   │   ├── index.ts
-│   │   ├── db/
-│   │   │   ├── index.ts
-│   │   │   ├── schema.ts
-│   │   │   ├── seed.ts
-│   │   │   └── migrations/
-│   │   ├── middleware/
-│   │   ├── routes/
-│   │   │   ├── auth.ts
-│   │   │   └── academic.ts
-│   │   └── services/
-│   │       ├── otpService.ts
-│   │       └── tokenService.ts
-│   ├── test/
-│   ├── package.json
-│   ├── drizzle.config.ts
-│   └── tsconfig.json
-│
-├── test/
-├── codemagic.yaml
-├── pubspec.yaml
-└── README.md
+│   │   ├── config.ts        # Environment & rate-limiting configuration
+│   │   ├── index.ts         # Express application factory, middleware, proxy config
+│   │   ├── db/              # Drizzle schema definitions, database connection, seed
+│   │   ├── middleware/      # Authentication & role guard middleware
+│   │   ├── routes/          # auth.ts, academic.ts, admin.ts route handlers
+│   │   ├── services/        # otpService, tokenService, importRetention
+│   │   └── scripts/         # cleanupImports CLI retention task
+│   └── test/                # Vitest test suites (26 integration tests)
+├── test/                    # Flutter test suites (8 unit & widget tests)
+├── codemagic.yaml           # CI/CD verification workflows
+└── pubspec.yaml             # Flutter dependencies
 ```
- 
----
- 
-## 🔌 Authentication API
- 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/auth/request-activation` | Start account activation |
-| `POST` | `/api/auth/verify-otp` | Verify OTP |
-| `POST` | `/api/auth/set-password` | Complete activation |
-| `POST` | `/api/auth/login` | Authenticate |
-| `POST` | `/api/auth/refresh` | Refresh session |
-| `POST` | `/api/auth/logout` | End session |
-| `GET` | `/api/auth/me` | Get authenticated user |
-| `POST` | `/api/academic/attendance` | Authorization boundary |
- 
-> The academic attendance endpoint is currently an authorization foundation and is intentionally not yet a complete attendance feature.
- 
----
- 
-## 🌎 Deployment Architecture
- 
-The frontend and backend are designed to deploy independently:
- 
-```text
-Flutter App
-     │
-     │ API_BASE_URL
-     ▼
-Cloud Backend
-     │
-     ▼
-Turso Database
-```
- 
-The project does **not** assume ownership of a custom domain — the backend can initially use a platform-provided deployment URL:
- 
-```env
-API_BASE_URL=https://<deployed-backend-url>
-```
- 
-A custom domain can be introduced later without changing the application architecture.
  
 ---
  
 ## 🔐 Environment Configuration
  
-Backend configuration is provided through environment variables:
+Configure backend settings in `backend/.env`:
  
 ```env
-TURSO_DATABASE_URL=
+# Database (Turso libSQL or local file)
+TURSO_DATABASE_URL=file:./dev.db
 TURSO_AUTH_TOKEN=
-JWT_SECRET=
-JWT_ISSUER=
-JWT_AUDIENCE=
-OTP_PROVIDER=
-CORS_ORIGINS=
+ 
+# Security & JWT
+JWT_SECRET=your-secure-random-jwt-secret-min-32-chars
+JWT_ISSUER=seshadripuram-one
+JWT_AUDIENCE=seshadripuram-one-app
+TRUST_PROXY=false
+ 
+# OTP Configuration ('console' for local dev, 'resend' for email delivery)
+OTP_PROVIDER=console
+RESEND_API_KEY=
+EMAIL_FROM=noreply@yourdomain.com
+ 
+# Client CORS Origins
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+ 
+# Optional Rate-Limiting Overrides
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_LOGIN_ACCOUNT_MAX=10
+RATE_LIMIT_ACTIVATION_MAX=5
 ```
- 
-A template is provided at `backend/.env.example`.
- 
-> ⚠️ **Real credentials must never be committed to GitHub.**
  
 ---
  
-## 🧪 Testing
+## 🧪 Testing & Quality Verification
  
-**Backend**
+### Backend Test Suite (Vitest)
+ 
+Run typecheck, linting, and automated integration tests:
  
 ```bash
 cd backend
@@ -434,191 +332,88 @@ npm run lint
 npm test
 ```
  
-**Flutter**
+Coverage includes 26 passing tests across 5 test suites:
+- `auth.test.ts` (9 tests): Activation flow, OTP expiration/limits, read-only activation, display names, JWT sessions, role access.
+- `reliability.test.ts` (5 tests): Granular rate limiters, proxy header handling, payload limits (32kb / 5mb), malformed JSON.
+- `academic_read.test.ts` (4 tests): Scoped timetable and announcements isolation across institutions and sections.
+- `admin_import.test.ts` (7 tests): Import preview duplicate checking, atomic commit rollback, FAILED status reporting, and immediate payload purging.
+- `academic_schema.test.ts` (1 test): Drizzle database migration integrity.
+ 
+### Flutter Client Test Suite
+ 
+Run static analysis and unit/widget tests:
  
 ```bash
 flutter analyze
 flutter test
 ```
  
-Current Phase 3 verification covers:
+Coverage includes 8 passing tests across 4 test suites:
+- `auth_interceptor_test.dart` (3 tests): Single in-flight 401 token refresh queue, request retrying with updated token, session cleanup on failure, and concurrent request coalescing.
+- `app_router_test.dart` (1 test): Verifies `GoRouter` instance remains stable across auth state emissions without recreation.
+- `dashboard_user_logout_test.dart` (1 test): Verifies real user name rendering on dashboards and working logout flow.
+- `auth_repository_test.dart` (2 tests): Role resolution on login and API error handling.
  
-- Unknown institution IDs
-- Student & teacher role resolution
-- OTP validation, expiration, reuse prevention, attempt limits
-- Authentication & authorization boundaries
-- JWT/session behavior
-- Flutter authentication repository
 ---
  
 ## ⚙️ Local Development
  
-**1. Clone**
+**1. Clone the repository**
  
 ```bash
-git clone https://github.com/dikshith-shetty-3621/seshadripuram-one.git
+git clone https://github.com/coding-shetty/seshadripuram-one.git
 cd seshadripuram-one
 ```
  
-**2. Install Flutter dependencies**
- 
-```bash
-flutter pub get
-```
- 
-**3. Install backend dependencies**
+**2. Setup backend**
  
 ```bash
 cd backend
-npm ci
-```
- 
-**4. Configure environment**
- 
-```bash
+npm install
 cp .env.example .env
+npm run db:migrate
+npm run db:seed    # Optional: Populates initial sample records
+npm run dev        # Starts Express server on http://localhost:3000
 ```
  
-Then fill in the required variables.
- 
-**5. Set up the database**
+**3. Setup Flutter app**
  
 ```bash
-npm run db:migrate   # run migrations
-npm run db:seed       # optional development seed data
-```
- 
-**6. Start the backend**
- 
-```bash
-npm run dev
-```
- 
-**7. Start the Flutter app**
- 
-From the project root:
- 
-```bash
-# On physical device or desktop:
+# From project root
+flutter pub get
 flutter run --dart-define=API_BASE_URL=http://localhost:3000
-
-# On Android emulator (10.0.2.2 points to host localhost):
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
-```
- 
-Or against a deployed backend:
- 
-```bash
-flutter run --dart-define=API_BASE_URL=https://<backend-url>
 ```
  
 ---
  
-## 🛣️ Roadmap
+## 📱 Android Emulator Setup
  
-- [x] **Phase 1 — Project Foundation**
-  Flutter project, platform setup, base architecture, core structure, Git/GitHub setup
-- [x] **Phase 2 — Architecture & Backend Foundation**
-  Flutter feature architecture, backend foundation, Turso/Drizzle foundation, initial auth architecture
-- [x] **Phase 3 — Authentication & Authorization** *(current)*
-  OTP activation, secure authentication, JWT access tokens, refresh sessions, role-based authorization, secure token storage, auth testing, admin foundation
-- [ ] **Phase 4 — Academic Core**
-  Student & teacher dashboards, announcements, class updates, timetable, attendance, subject-wise attendance, absence history
-- [ ] **Phase 5 — Academic Performance**
-  Internal marks, SEM examination marks, project marks, performance overview
-- [ ] **Phase 6 — Assignments & Learning**
-  Assignments, submissions, notes, study materials, attachments, teacher uploads
-- [ ] **Phase 7 — Communication**
-  Teacher → student communication, class announcements, notifications, academic updates
-- [ ] **Phase 8 — Administration**
-  Admin dashboard, student/teacher import, CSV/JSON validation, department/subject/section management, academic year management, audit logs
-- [ ] **Phase 9 — Production**
-  Production backend deployment, Turso production database, OTP provider, production signing, release builds, monitoring, crash reporting, security hardening, CI/CD improvements
----
+When running the Flutter app inside an Android emulator:
  
-## 📊 Project Maturity
- 
-| Area | Status |
-|---|---|
-| Flutter architecture | 🟢 Foundation |
-| Backend architecture | 🟢 Foundation |
-| Database | 🟢 Foundation |
-| Authentication | 🟢 Implemented foundation |
-| OTP | 🟢 Implemented foundation |
-| Authorization | 🟢 Implemented foundation |
-| Student features | 🟡 Planned |
-| Teacher features | 🟡 Planned |
-| Admin features | 🟡 Foundation |
-| Attendance | 🟡 Planned |
-| Marks | 🟡 Planned |
-| Assignments | 🟡 Planned |
-| Notes | 🟡 Planned |
-| Notifications | 🟡 Planned |
-| Production OTP provider | 🔴 Not configured |
-| Production deployment | 🔴 Pending |
+1. **Host Loopback Address:** The Android emulator runs in an isolated virtual network. `http://localhost:3000` refers to the emulator itself. To connect to the Express backend running on your development host machine, use:
+   ```bash
+   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
+   ```
+2. **Cleartext HTTP:** Android 9+ (API 28+) blocks unencrypted HTTP traffic by default. The debug Android manifest (`android/app/src/debug/AndroidManifest.xml`) is configured with `android:usesCleartextTraffic="true"` to permit local development traffic to `http://10.0.2.2:3000` without requiring TLS certificates.
  
 ---
  
-## ⚠️ Current Limitations
+## 🛣️ Roadmap & Maturity
  
-Seshadripuram One is **not yet production-ready**. The following still require external configuration or future development:
- 
-- Production Turso database & credentials
-- SMS/email OTP provider
-- Backend cloud deployment
-- Production application signing
-- Complete academic modules
-- Admin data import workflow
-- Production monitoring
-- Final security hardening
-The current implementation intentionally focuses on building a secure foundation before implementing the complete academic platform.
+| Phase | Focus Area | Status |
+|---|---|---|
+| Phase 1 | Project foundation, multi-platform setup, Git structure | 🟢 Completed |
+| Phase 2 | Architecture foundation, Drizzle schema, Turso integration | 🟢 Completed |
+| Phase 3 | Authentication, OTP verification, JWT sessions, rate limiting | 🟢 Completed |
+| Phase 4 | Academic Core (Scoped Timetables, Scoped Announcements) | 🟡 In Progress |
+| Phase 5 | Academic Performance (Internal marks, SEM marks, analytics) | ⚪ Planned |
+| Phase 6 | Assignments & Courseware (Submissions, study materials) | ⚪ Planned |
+| Phase 7 | Communication (Class notices, teacher broadcasts, notifications) | ⚪ Planned |
+| Phase 8 | Administration (Bulk CSV/JSON import pipeline, audit logs) | 🟡 Foundation Completed |
+| Phase 9 | Production Deployment (Cloud deployment, production signing) | ⚪ Planned |
  
 ---
  
 ## 🔒 Security
  
-Security issues should **not** be publicly discussed through GitHub issues. If you discover a vulnerability, please report it privately to the project maintainer rather than publishing exploit details publicly.
- 
-Never commit the following to the repository:
- 
-- Database credentials
-- JWT secrets
-- OTP provider credentials
-- API keys
-- Personal student or teacher information
----
- 
-## 🤝 Development Philosophy
- 
-Seshadripuram One is being developed incrementally, prioritizing:
- 
-> **Security → Architecture → Testing → Features → Production**
- 
-rather than building a large UI first and adding security afterward. The goal is a platform that can eventually handle real institutional data safely and reliably.
- 
----
- 
-## 📌 Project Status
- 
-| | |
-|---|---|
-| **Current phase** | Phase 3 — Authentication & Authorization Foundation |
-| **Platform** | Flutter |
-| **Backend** | Node.js + Express + TypeScript |
-| **Database** | Turso / libSQL |
-| **ORM** | Drizzle |
-| **State management** | Riverpod |
-| **CI/CD** | Codemagic |
-| **Status** | 🚧 Active Development |
- 
----
- 
-<div align="center">
-### ⭐ If you find this project interesting
- 
-Seshadripuram One is being built as a long-term college technology platform, with the goal of making academic communication simpler, more organized, and more secure.
- 
-**One platform for the entire academic ecosystem.**
- 
-</div>
- 
+If you discover a security vulnerability, please report it privately to the repository maintainer. Never commit credentials, JWT secrets, database connection tokens, or real student PII to GitHub.
