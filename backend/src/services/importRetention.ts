@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { isNotNull, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../db';
-import { importJobs } from '../db/schema';
+import { importJobs, auditLogs } from '../db/schema';
 
 export interface CleanupOptions {
   retentionDays?: number;
@@ -56,8 +57,18 @@ export async function cleanupImportPayloads(
       .where(sql`${importJobs.id} = ${id}`);
   }
 
+  await customDb.insert(auditLogs).values({
+    id: randomUUID(),
+    action: 'IMPORT_PAYLOAD_PURGED',
+    details: JSON.stringify({
+      purgedJobIds: toPurgeIds,
+      count: toPurgeIds.length,
+    }),
+  });
+
   return {
     purgedCount: toPurgeIds.length,
     purgedJobIds: toPurgeIds,
   };
 }
+

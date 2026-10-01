@@ -360,9 +360,13 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
     const identity = await resolveIdentity(institutionId);
     const user = identity ? await db.select().from(users).where(eq(users.id, identity.userId)).get() : undefined;
     if (!identity || !identity.isActive || identity.accountStatus !== "ACTIVE" || !user?.passwordHash) {
+      await audit("LOGIN_FAILED", JSON.stringify({ institutionId, reason: "invalid_credentials" }));
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    if (!(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: "Invalid credentials" });
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      await audit("LOGIN_FAILED", JSON.stringify({ institutionId, userId: user.id, reason: "invalid_credentials" }));
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     const session = await createSession(identity);
     await audit("LOGIN_SUCCESS", `Login for ${identity.userId}`);

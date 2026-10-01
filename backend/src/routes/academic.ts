@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import {
   announcements,
+  auditLogs,
   departments,
   enrollments,
   institutions,
@@ -217,6 +218,18 @@ academicRouter.post('/announcements', requireAuthentication, requireRole('TEACHE
     publishedAt: new Date().toISOString(),
     isPublished: true,
     createdByUserId: req.auth!.sub,
+  });
+
+  await db.insert(auditLogs).values({
+    id: randomUUID(),
+    action: 'ANNOUNCEMENT_CREATED',
+    details: JSON.stringify({
+      announcementId: id,
+      authorUserId: req.auth!.sub,
+      institutionId: ctx.institutionId,
+      category,
+      audienceRole: audienceRole ?? 'ALL',
+    }),
   });
 
   return res.status(201).json({ status: 'created', id });
