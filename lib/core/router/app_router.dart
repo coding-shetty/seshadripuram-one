@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/domain/app_user.dart';
 import '../../features/auth/domain/user_role.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -12,12 +13,24 @@ import '../widgets/demo_feature_screen.dart';
 import '../../features/student/dashboard/presentation/student_dashboard_screen.dart';
 import '../../features/teacher/dashboard/presentation/teacher_dashboard_screen.dart';
 
+class RouterAuthListenable extends ChangeNotifier {
+  RouterAuthListenable(Ref ref) {
+    ref.listen<AsyncValue<AppUser?>>(
+      authStateProvider,
+      (_, _) => notifyListeners(),
+    );
+  }
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final listenable = RouterAuthListenable(ref);
+  ref.onDispose(listenable.dispose);
 
   return GoRouter(
     initialLocation: '/login',
+    refreshListenable: listenable,
     redirect: (BuildContext context, GoRouterState state) {
+      final authState = ref.read(authStateProvider);
       final isAuthLoading = authState.isLoading;
       if (isAuthLoading) return null; // Can redirect to a splash screen here if needed
 
