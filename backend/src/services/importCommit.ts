@@ -1,16 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { auditLogs, importJobs, institutions, students, teachers, users } from '../db/schema';
-import type { ImportEntity } from './importValidation';
+import { isCommitSupported, type ImportEntity, type SupportedImportEntity } from './importValidation';
+
+export { isCommitSupported };
 
 export class ImportCommitError extends Error {
   constructor(public readonly code: 'UNSUPPORTED_ENTITY' | 'INVALID_PREVIEW' | 'CONFLICT', message: string) {
     super(message);
   }
-}
-
-export function isCommitSupported(entity: ImportEntity): boolean {
-  return ['institutions', 'students', 'teachers'].includes(entity);
 }
 
 type ImportRow = Record<string, unknown>;

@@ -4,15 +4,29 @@ import { db } from '../db';
 import { importJobs } from '../db/schema';
 import { commitImport, ImportCommitError, isCommitSupported, markImportCommitted } from '../services/importCommit';
 import type { ImportEntity } from '../services/importValidation';
+import { z } from 'zod';
 import { requireAuthentication, requireRole } from '../middleware/auth';
 import { validateImportPreview } from '../services/importValidation';
 import { createOpaqueToken } from '../services/tokenService';
 
 export const adminRouter = Router();
 
+const previewSchema = z.object({
+  entity: z.string().trim().min(1, 'Entity is required'),
+  rows: z.unknown(),
+});
+
+const jobIdParamSchema = z.object({
+  id: z.string().trim().min(1, 'Import preview ID is required'),
+});
+
 adminRouter.post('/imports/preview', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const entity = typeof req.body?.entity === 'string' ? req.body.entity.trim() : '';
-  const preview = validateImportPreview(entity, req.body?.rows);
+  const parseResult = previewSchema.safeParse(req.body ?? {});
+  if (!parseResult.success) {
+    return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Entity is required' });
+  }
+  const { entity, rows } = parseResult.data;
+  const preview = validateImportPreview(entity, rows);
   if ('error' in preview) return res.status(400).json(preview);
 
   const jobId = createOpaqueToken();
@@ -39,8 +53,9 @@ adminRouter.post('/imports/preview', requireAuthentication, requireRole('ADMIN')
 });
 
 adminRouter.post('/imports/:id/commit', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const jobId = typeof req.params.id === 'string' ? req.params.id : null;
-  if (!jobId) return res.status(400).json({ error: 'Import preview ID is required' });
+  const paramResult = jobIdParamSchema.safeParse(req.params);
+  if (!paramResult.success) return res.status(400).json({ error: 'Import preview ID is required' });
+  const jobId = paramResult.data.id;
 
   const job = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).get();
   if (!job || job.actorUserId !== req.auth!.sub) return res.status(404).json({ error: 'Import preview not found' });
@@ -70,8 +85,9 @@ adminRouter.post('/imports/:id/commit', requireAuthentication, requireRole('ADMI
 });
 
 adminRouter.get('/imports/:id', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const jobId = typeof req.params.id === 'string' ? req.params.id : null;
-  if (!jobId) return res.status(400).json({ error: 'Import preview ID is required' });
+  const paramResult = jobIdParamSchema.safeParse(req.params);
+  if (!paramResult.success) return res.status(400).json({ error: 'Import preview ID is required' });
+  const jobId = paramResult.data.id;
   const job = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).get();
   if (!job || job.actorUserId !== req.auth!.sub) return res.status(404).json({ error: 'Import preview not found' });
 

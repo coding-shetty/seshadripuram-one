@@ -82,11 +82,11 @@ describe('admin import preview', () => {
       .post('/api/admin/imports/preview')
       .set('Authorization', `Bearer ${createToken(adminId, 'ADMIN')}`)
       .send({
-        entity: 'departments',
+        entity: 'students',
         rows: [
-          { code: 'CS', name: 'Computer Science' },
-          { code: 'CS', name: 'Computer Science Duplicate' },
-          { code: '', name: 'Missing code' },
+          { studentId: '23BCA001', fullName: 'Aarav Sharma', contactEmail: 'aarav@example.com' },
+          { studentId: '23BCA001', fullName: 'Aarav Duplicate', contactEmail: 'aarav2@example.com' },
+          { studentId: '', fullName: 'Missing studentId', contactEmail: 'invalid@example.com' },
         ],
       })
       .expect(201);
@@ -99,5 +99,20 @@ describe('admin import preview', () => {
 
     const stored = await db.select().from(importJobs).where(eq(importJobs.id, response.body.importJobId));
     expect(stored).toHaveLength(1);
+  });
+
+  it('rejects unsupported entities in preview up front with a clear message', async () => {
+    const adminId = await createUser('ADMIN');
+    const response = await request(app)
+      .post('/api/admin/imports/preview')
+      .set('Authorization', `Bearer ${createToken(adminId, 'ADMIN')}`)
+      .send({
+        entity: 'departments',
+        rows: [{ code: 'CS', name: 'Computer Science' }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/Unsupported import entity/i);
+    expect(response.body.error).toContain('institutions, students, teachers');
   });
 });

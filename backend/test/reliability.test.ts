@@ -65,14 +65,15 @@ describe('backend reliability & error handling', () => {
 
     // Generate 1000 rows (~50KB payload)
     const rows = Array.from({ length: 1000 }, (_, i) => ({
-      code: `DEP-${i}`,
-      name: `Department Name ${i}`,
+      studentId: `STU-${i}`,
+      fullName: `Student Name ${i}`,
+      contactEmail: `stu${i}@example.com`,
     }));
 
     const res = await request(app)
       .post('/api/admin/imports/preview')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ entity: 'departments', rows });
+      .send({ entity: 'students', rows });
 
     // Should NOT be 500 or 413
     expect(res.status).toBe(201);

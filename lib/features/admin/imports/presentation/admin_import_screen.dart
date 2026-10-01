@@ -15,25 +15,16 @@ class AdminImportScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminImportScreenState extends ConsumerState<AdminImportScreen> {
-  final _rowsController = TextEditingController(text: '[\n  {"code": "BCA", "name": "Bachelor of Computer Applications"}\n]');
-  String _entity = 'departments';
+  final _rowsController = TextEditingController(text: '[\n  {"studentId": "23BCA001", "fullName": "Aarav Sharma", "contactEmail": "aarav.sharma@example.com"}\n]');
+  String _entity = 'students';
   bool _loading = false;
   String? _error;
   Map<String, dynamic>? _preview;
 
   static const _entities = [
-    'institutions',
-    'departments',
-    'programs',
-    'academic_years',
-    'semesters',
-    'sections',
-    'subjects',
-    'subject_offerings',
     'students',
     'teachers',
-    'enrollments',
-    'teaching_assignments',
+    'institutions',
   ];
 
   @override

@@ -13,7 +13,13 @@ export const importEntities = [
   'teaching_assignments',
 ] as const;
 
+export const supportedImportEntities = ['institutions', 'students', 'teachers'] as const;
+export type SupportedImportEntity = (typeof supportedImportEntities)[number];
 export type ImportEntity = (typeof importEntities)[number];
+
+export function isCommitSupported(entity: string): entity is SupportedImportEntity {
+  return (supportedImportEntities as readonly string[]).includes(entity);
+}
 
 type ImportRow = Record<string, unknown>;
 
@@ -65,8 +71,6 @@ export interface ImportRowError {
   message: string;
 }
 
-export const committableImportEntities: ImportEntity[] = ['institutions', 'departments', 'students', 'teachers'];
-
 export interface ImportPreview {
   entity: ImportEntity;
   totalRows: number;
@@ -76,13 +80,13 @@ export interface ImportPreview {
 }
 
 export function validateImportPreview(entity: string, rows: unknown): ImportPreview | { error: string } {
-  if (!importEntities.includes(entity as ImportEntity)) {
-    return { error: `Unsupported import entity. Use one of: ${importEntities.join(', ')}` };
+  if (!isCommitSupported(entity)) {
+    return { error: `Unsupported import entity: "${entity}". Supported entities for import and commit are: ${supportedImportEntities.join(', ')}` };
   }
   if (!Array.isArray(rows)) return { error: 'rows must be an array of objects' };
   if (rows.length > 1000) return { error: 'A single preview cannot contain more than 1000 rows' };
 
-  const typedEntity = entity as ImportEntity;
+  const typedEntity = entity as SupportedImportEntity;
   const required = requiredFields[typedEntity];
   const seen = new Set<string>();
   const errors: ImportRowError[] = [];
