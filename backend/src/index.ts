@@ -80,6 +80,11 @@ export function createApp(options: AppOptions = {}) {
   return app;
 }
 
+import { setupGracefulShutdown } from './utils/shutdown';
+
 if (require.main === module) {
-  createApp().listen(config.port, () => console.info(`Server listening on port ${config.port}`));
+  const server = createApp().listen(config.port, () => {
+    logger.info({ event: 'server_started', port: config.port });
+  });
+  setupGracefulShutdown(server);
 }

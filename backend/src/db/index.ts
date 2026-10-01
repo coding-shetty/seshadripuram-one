@@ -10,3 +10,7 @@ const authToken = process.env.TURSO_AUTH_TOKEN;
 const client = createClient(authToken ? { url, authToken } : { url });
 
 export const db = drizzle(client, { schema });
+
+export function closeDatabase(): void {
+  client.close();
+}
