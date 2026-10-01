@@ -36,6 +36,13 @@
       "when": 1787350545727,
       "tag": "0004_careless_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790862184920,
+      "tag": "0005_peaceful_black_panther",
+      "breakpoints": true
     }
   ]
 }

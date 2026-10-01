@@ -209,6 +209,9 @@ export const importJobs = sqliteTable('import_jobs', {
 
 export const announcements = sqliteTable('announcements', {
   id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  departmentId: text('department_id').references(() => departments.id),
+  sectionId: text('section_id').references(() => sections.id),
   title: text('title').notNull(),
   body: text('body').notNull(),
   category: text('category').notNull().default('GENERAL'),
@@ -219,10 +222,16 @@ export const announcements = sqliteTable('announcements', {
 }, (table) => [
   index('announcements_published_idx').on(table.isPublished, table.publishedAt),
   index('announcements_audience_role_idx').on(table.audienceRole),
+  index('announcements_institution_idx').on(table.institutionId),
+  index('announcements_department_idx').on(table.departmentId),
+  index('announcements_section_idx').on(table.sectionId),
 ]);
 
 export const timetableEntries = sqliteTable('timetable_entries', {
   id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  sectionId: text('section_id').references(() => sections.id),
+  teacherId: text('teacher_id').references(() => teachers.id),
   dayOfWeek: integer('day_of_week').notNull(),
   startTime: text('start_time').notNull(),
   endTime: text('end_time').notNull(),
@@ -234,4 +243,7 @@ export const timetableEntries = sqliteTable('timetable_entries', {
 }, (table) => [
   index('timetable_day_idx').on(table.dayOfWeek, table.startTime),
   index('timetable_section_idx').on(table.sectionName),
+  index('timetable_institution_idx').on(table.institutionId),
+  index('timetable_section_id_idx').on(table.sectionId),
+  index('timetable_teacher_id_idx').on(table.teacherId),
 ]);
