@@ -18,6 +18,16 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
   emailFrom: process.env.EMAIL_FROM?.trim() ?? '',
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  trustProxy: process.env.TRUST_PROXY ?? '1',
+  rateLimits: {
+    activationMax: Number(process.env.RATE_LIMIT_ACTIVATION_MAX ?? 5),
+    verifyOtpMax: Number(process.env.RATE_LIMIT_VERIFY_OTP_MAX ?? 5),
+    loginAccountMax: Number(process.env.RATE_LIMIT_LOGIN_ACCOUNT_MAX ?? 10),
+    loginIpMax: Number(process.env.RATE_LIMIT_LOGIN_IP_MAX ?? 50),
+    refreshMax: Number(process.env.RATE_LIMIT_REFRESH_MAX ?? 100),
+    meMax: Number(process.env.RATE_LIMIT_ME_MAX ?? 200),
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+  },
 };
 
 if (config.jwtSecret.length < 32) {
