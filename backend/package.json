@@ -12,6 +12,7 @@
     "dev": "tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:check": "tsx src/scripts/checkMigrationDrift.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
     "cleanup:imports": "tsx src/scripts/cleanupImports.ts"
