@@ -499,7 +499,11 @@ npm run dev
 From the project root:
  
 ```bash
+# On physical device or desktop:
 flutter run --dart-define=API_BASE_URL=http://localhost:3000
+
+# On Android emulator (10.0.2.2 points to host localhost):
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
 ```
  
 Or against a deployed backend:
