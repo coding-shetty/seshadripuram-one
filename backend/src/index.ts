@@ -9,6 +9,8 @@ import { academicRouter } from './routes/academic';
 import { adminRouter } from './routes/admin';
 import { createAuthRouter, type AuthRouterOptions } from './routes/auth';
 
+import { logger, requestLoggerMiddleware } from './utils/logger';
+
 export interface AppOptions extends AuthRouterOptions {}
 
 function parseTrustProxy(value: string): boolean | number | string {
@@ -29,12 +31,8 @@ export function createApp(options: AppOptions = {}) {
   // Security headers via Helmet
   app.use(helmet());
 
-  app.use((req, res, next) => {
-    const requestId = req.header('x-request-id')?.trim() || randomUUID();
-    res.setHeader('x-request-id', requestId);
-    res.locals.requestId = requestId;
-    next();
-  });
+  // Structured request tracing and JSON logging
+  app.use(requestLoggerMiddleware);
 
   app.use(cors({
     origin(origin, callback) {
