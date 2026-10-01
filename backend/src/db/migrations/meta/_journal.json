@@ -57,6 +57,13 @@
       "when": 1790866537345,
       "tag": "0007_flippant_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790866792752,
+      "tag": "0008_unique_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

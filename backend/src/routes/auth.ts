@@ -10,6 +10,7 @@ import { activationGrants, auditLogs, authSessions, otpSessions, students, teach
 import { requireAuthentication } from "../middleware/auth";
 import { createOtpService } from "../services/otpService";
 import { createAccessToken, createOpaqueToken, hashOpaqueToken, type AppRole } from "../services/tokenService";
+import { logger } from "../utils/logger";
 
 const otpService = createOtpService();
 const otpExpiryMs = 10 * 60 * 1000;
@@ -126,11 +127,13 @@ function publicUser(identity: Identity) {
   return { id: identity.userId, institutionId: identity.institutionId, name: identity.name, role: identity.role };
 }
 
-async function createSession(identity: Identity) {
+async function createSession(identity: Identity, familyId?: string) {
   const refreshToken = createOpaqueToken();
+  const sessionFamilyId = familyId || randomUUID();
   await db.insert(authSessions).values({
     id: randomUUID(),
     userId: identity.userId,
+    familyId: sessionFamilyId,
     refreshTokenHash: hashOpaqueToken(refreshToken),
     expiresAt: Date.now() + refreshExpiryMs,
   });
@@ -370,28 +373,59 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
     }
     const { refreshToken } = result.data;
 
-    const session = await db.select().from(authSessions).where(and(
-      eq(authSessions.refreshTokenHash, hashOpaqueToken(refreshToken)), isNull(authSessions.revokedAt), gt(authSessions.expiresAt, Date.now()),
-    )).get();
+    const tokenHash = hashOpaqueToken(refreshToken);
+    const session = await db.select().from(authSessions).where(eq(authSessions.refreshTokenHash, tokenHash)).get();
     if (!session) return res.status(401).json({ error: "Invalid or expired refresh token" });
+
+    // Reuse detection: If the refresh token was already revoked, an attacker is replaying it!
+    if (session.revokedAt !== null) {
+      logger.warn({
+        event: 'refresh_token_reuse_detected',
+        userId: session.userId,
+        familyId: session.familyId,
+        sessionId: session.id,
+      });
+      // Revoke the entire session family for this user
+      await db.transaction(async (tx) => {
+        if (session.familyId) {
+          await tx.update(authSessions).set({ revokedAt: Date.now() }).where(and(eq(authSessions.familyId, session.familyId), isNull(authSessions.revokedAt)));
+        } else {
+          await tx.update(authSessions).set({ revokedAt: Date.now() }).where(and(eq(authSessions.userId, session.userId), isNull(authSessions.revokedAt)));
+        }
+        await tx.insert(auditLogs).values({
+          id: randomUUID(),
+          action: 'REFRESH_TOKEN_REUSE_DETECTED',
+          details: JSON.stringify({ userId: session.userId, familyId: session.familyId }),
+        });
+      });
+      return res.status(401).json({ error: "Refresh token reuse detected. All active sessions have been revoked." });
+    }
+
+    if (Date.now() > session.expiresAt) {
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+
     const user = await db.select().from(users).where(eq(users.id, session.userId)).get();
     if (!user?.institutionId || !validRole(user.role) || !user.isActive || user.accountStatus !== "ACTIVE") {
       return res.status(401).json({ error: "Session is no longer valid" });
     }
     const identity = await resolveIdentity(user.institutionId);
     if (!identity) return res.status(401).json({ error: "Session is no longer valid" });
+
+    const familyId = session.familyId || session.id;
     const newSession = await db.transaction(async (tx) => {
       await tx.update(authSessions).set({ revokedAt: Date.now() }).where(eq(authSessions.id, session.id));
-      const refreshToken = createOpaqueToken();
+      const nextRefreshToken = createOpaqueToken();
       await tx.insert(authSessions).values({
         id: randomUUID(),
         userId: identity.userId,
-        refreshTokenHash: hashOpaqueToken(refreshToken),
+        familyId,
+        refreshTokenHash: hashOpaqueToken(nextRefreshToken),
         expiresAt: Date.now() + refreshExpiryMs,
       });
       return {
         accessToken: createAccessToken({ sub: identity.userId, role: identity.role, institutionId: identity.institutionId }),
-        refreshToken,
+        refreshToken: nextRefreshToken,
         user: publicUser(identity),
       };
     });

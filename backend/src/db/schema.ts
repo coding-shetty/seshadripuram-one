@@ -63,12 +63,14 @@ export const activationGrants = sqliteTable("activation_grants", {
 export const authSessions = sqliteTable("auth_sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
+  familyId: text("family_id"),
   refreshTokenHash: text("refresh_token_hash").notNull().unique(),
   expiresAt: integer("expires_at").notNull(),
   revokedAt: integer("revoked_at"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("auth_sessions_user_id_idx").on(table.userId),
+  index("auth_sessions_family_id_idx").on(table.familyId),
   index("auth_sessions_expires_at_idx").on(table.expiresAt),
   index("auth_sessions_revoked_at_idx").on(table.revokedAt),
 ]);
