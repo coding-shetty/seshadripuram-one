@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { createApp } from '../src';
 import {
+  createApp,
   AppError,
   BadRequestError,
   UnauthorizedError,
@@ -13,7 +13,7 @@ import {
   UnprocessableEntityError,
   TooManyRequestsError,
   centralErrorHandler,
-} from '../src/utils/errors';
+} from '../src';
 
 describe('centralized error handling & typed errors', () => {
   it('instantiates typed app errors with correct status codes and error codes', () => {

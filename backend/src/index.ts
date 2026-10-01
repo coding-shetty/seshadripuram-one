@@ -12,6 +12,10 @@ import { createAuthRouter, type AuthRouterOptions } from './routes/auth';
 import { logger, requestLoggerMiddleware } from './utils/logger';
 import { centralErrorHandler } from './utils/errors';
 
+export * from './utils/errors';
+export * from './utils/logger';
+export * from './utils/shutdown';
+
 export interface AppOptions extends AuthRouterOptions {}
 
 function parseTrustProxy(value: string): boolean | number | string {
