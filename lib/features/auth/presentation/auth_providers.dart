@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/session/session_expired_notifier.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../data/api_auth_repository.dart';
 import '../data/auth_repository.dart';
@@ -10,7 +11,14 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     ref.watch(apiClientProvider),
     ref.watch(secureStorageProvider),
   );
-  ref.onDispose(repository.dispose);
+  final sessionNotifier = ref.watch(sessionExpiredNotifierProvider);
+  final sub = sessionNotifier.onExpired.listen((_) {
+    repository.logout();
+  });
+  ref.onDispose(() {
+    sub.cancel();
+    repository.dispose();
+  });
   return repository;
 });
 
@@ -20,8 +28,8 @@ final authStateProvider = StreamProvider<AppUser?>((ref) {
   return authRepository.authStateChanges();
 });
 
-/// Exposes the current user synchronously.
+/// Exposes the current user synchronously, updated whenever auth state emits.
 final currentUserProvider = Provider<AppUser?>((ref) {
-  final authRepository = ref.watch(authRepositoryProvider);
-  return authRepository.currentUser;
+  final authState = ref.watch(authStateProvider);
+  return authState.value ?? ref.watch(authRepositoryProvider).currentUser;
 });
