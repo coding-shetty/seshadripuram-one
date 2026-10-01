@@ -295,7 +295,10 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
       if (challenge) await db.delete(otpSessions).where(eq(otpSessions.institutionId, institutionId));
       return res.status(400).json({ error: "OTP is invalid or expired" });
     }
-    if (challenge.attempts >= 5) return res.status(429).json({ error: "Too many OTP attempts" });
+    if (challenge.attempts >= 5) {
+      await db.delete(otpSessions).where(eq(otpSessions.institutionId, institutionId));
+      return res.status(429).json({ error: "Too many OTP attempts" });
+    }
     if (!(await bcrypt.compare(otp, challenge.otpHash))) {
       await db.update(otpSessions).set({ attempts: challenge.attempts + 1 }).where(eq(otpSessions.institutionId, institutionId));
       return res.status(400).json({ error: "OTP is invalid or expired" });
