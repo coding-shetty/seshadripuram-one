@@ -200,6 +200,7 @@ export const importJobs = sqliteTable('import_jobs', {
   invalidRows: integer('invalid_rows').notNull(),
   errorsJson: text('errors_json').notNull(),
   payloadJson: text('payload_json'),
+  purgedAt: text('purged_at'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index('import_jobs_actor_idx').on(table.actorUserId),

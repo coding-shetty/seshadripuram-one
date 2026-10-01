@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
 import { importJobs, institutions, students, teachers, users } from '../src/db/schema';
 import { createApp } from '../src/index';
+import { cleanupImportPayloads } from '../src/services/importRetention';
 import { createAccessToken } from '../src/services/tokenService';
 
 const app = createApp();
@@ -76,6 +77,10 @@ describe('admin import preview', () => {
       .expect(409);
     const stored = await db.select().from(institutions).where(eq(institutions.code, code));
     expect(stored).toHaveLength(1);
+
+    const committedJob = await db.select().from(importJobs).where(eq(importJobs.id, preview.body.importJobId)).get();
+    expect(committedJob?.payloadJson).toBeNull();
+    expect(committedJob?.purgedAt).toBeDefined();
   });
 
   it('reports duplicate and missing fields without writing academic records', async () => {
@@ -192,5 +197,52 @@ describe('admin import preview', () => {
     // Code A should NOT have been committed (all-or-nothing rolled back)
     const storedA = await db.select().from(institutions).where(eq(institutions.code, codeA)).get();
     expect(storedA).toBeUndefined();
+  });
+
+  it('purges abandoned preview payloads older than N retention days via cleanup function', async () => {
+    const adminId = await createUser('ADMIN');
+    const oldJobId = randomUUID();
+    const freshJobId = randomUUID();
+
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgo = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.insert(importJobs).values([
+      {
+        id: oldJobId,
+        actorUserId: adminId,
+        entity: 'students',
+        status: 'PREVIEWED',
+        totalRows: 1,
+        validRows: 1,
+        invalidRows: 0,
+        errorsJson: '[]',
+        payloadJson: JSON.stringify([{ studentId: 'S-OLD', fullName: 'Old Student' }]),
+        createdAt: tenDaysAgo,
+      },
+      {
+        id: freshJobId,
+        actorUserId: adminId,
+        entity: 'students',
+        status: 'PREVIEWED',
+        totalRows: 1,
+        validRows: 1,
+        invalidRows: 0,
+        errorsJson: '[]',
+        payloadJson: JSON.stringify([{ studentId: 'S-FRESH', fullName: 'Fresh Student' }]),
+        createdAt: oneDayAgo,
+      },
+    ]);
+
+    const result = await cleanupImportPayloads(db, { retentionDays: 7 });
+    expect(result.purgedCount).toBe(1);
+    expect(result.purgedJobIds).toContain(oldJobId);
+
+    const oldJob = await db.select().from(importJobs).where(eq(importJobs.id, oldJobId)).get();
+    expect(oldJob?.payloadJson).toBeNull();
+    expect(oldJob?.purgedAt).toBeDefined();
+
+    const freshJob = await db.select().from(importJobs).where(eq(importJobs.id, freshJobId)).get();
+    expect(freshJob?.payloadJson).not.toBeNull();
   });
 });

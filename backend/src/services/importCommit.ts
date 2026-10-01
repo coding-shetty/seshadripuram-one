@@ -82,7 +82,11 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
 }
 
 export async function markImportCommitted(tx: any, jobId: string, actorUserId: string, entity: ImportEntity, count: number): Promise<void> {
-  await tx.update(importJobs).set({ status: 'COMMITTED' }).where(and(eq(importJobs.id, jobId), eq(importJobs.actorUserId, actorUserId)));
+  await tx.update(importJobs).set({
+    status: 'COMMITTED',
+    payloadJson: null,
+    purgedAt: new Date().toISOString(),
+  }).where(and(eq(importJobs.id, jobId), eq(importJobs.actorUserId, actorUserId)));
   await tx.insert(auditLogs).values({
     id: randomUUID(),
     action: 'ACADEMIC_IMPORT_COMMITTED',

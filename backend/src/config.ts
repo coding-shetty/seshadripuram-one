@@ -28,6 +28,7 @@ export const config = {
     meMax: Number(process.env.RATE_LIMIT_ME_MAX ?? 200),
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
   },
+  importPayloadRetentionDays: Number(process.env.IMPORT_PAYLOAD_RETENTION_DAYS ?? 7),
 };
 
 if (config.jwtSecret.length < 32) {

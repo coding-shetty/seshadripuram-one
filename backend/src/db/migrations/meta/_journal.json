@@ -43,6 +43,13 @@
       "when": 1790862184920,
       "tag": "0005_peaceful_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790863562153,
+      "tag": "0006_peaceful_maggott",
+      "breakpoints": true
     }
   ]
 }
