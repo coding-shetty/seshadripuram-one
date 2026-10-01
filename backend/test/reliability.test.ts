@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
-import { importJobs, users } from '../src/db/schema';
+import { activationGrants, authSessions, importJobs, students, teachers, users } from '../src/db/schema';
 import { createApp } from '../src/index';
 import { createAccessToken } from '../src/services/tokenService';
 
@@ -10,7 +10,11 @@ const app = createApp();
 
 describe('backend reliability & error handling', () => {
   async function cleanup() {
+    await db.delete(authSessions);
+    await db.delete(activationGrants);
     await db.delete(importJobs);
+    await db.delete(students);
+    await db.delete(teachers);
     await db.delete(users);
   }
 

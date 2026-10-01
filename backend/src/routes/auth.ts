@@ -34,15 +34,26 @@ async function audit(action: string, details: string): Promise<void> {
   await db.insert(auditLogs).values({ id: randomUUID(), action, details });
 }
 
-async function resolveIdentity(institutionId: string): Promise<Identity | null> {
+async function resolveIdentity(
+  institutionId: string,
+  options: { persist?: boolean } = {}
+): Promise<Identity | null> {
   const directUser = await db.select().from(users).where(eq(users.institutionId, institutionId)).get();
   if (directUser) {
     if (!validRole(directUser.role)) return null;
+    let realName = directUser.institutionId ?? "";
+    if (directUser.role === "STUDENT") {
+      const student = await db.select().from(students).where(eq(students.studentId, institutionId)).get();
+      if (student?.fullName) realName = student.fullName;
+    } else if (directUser.role === "TEACHER") {
+      const teacher = await db.select().from(teachers).where(eq(teachers.employeeId, institutionId)).get();
+      if (teacher?.fullName) realName = teacher.fullName;
+    }
     return {
       userId: directUser.id,
       role: directUser.role,
       institutionId,
-      name: institutionId,
+      name: realName,
       contactEmail: directUser.contactEmail,
       accountStatus: directUser.accountStatus,
       isActive: directUser.isActive,
@@ -50,10 +61,10 @@ async function resolveIdentity(institutionId: string): Promise<Identity | null> 
   }
 
   const student = await db.select().from(students).where(eq(students.studentId, institutionId)).get();
-  if (student) return resolveProfileIdentity(student, "STUDENT", institutionId);
+  if (student) return resolveProfileIdentity(student, "STUDENT", institutionId, options.persist ?? false);
 
   const teacher = await db.select().from(teachers).where(eq(teachers.employeeId, institutionId)).get();
-  if (teacher) return resolveProfileIdentity(teacher, "TEACHER", institutionId);
+  if (teacher) return resolveProfileIdentity(teacher, "TEACHER", institutionId, options.persist ?? false);
 
   return null;
 }
@@ -62,10 +73,23 @@ async function resolveProfileIdentity(
   profile: { userId: string | null; fullName: string; contactEmail: string; isActive: boolean },
   role: Extract<AppRole, "STUDENT" | "TEACHER">,
   institutionId: string,
+  persist: boolean,
 ): Promise<Identity | null> {
   let user = profile.userId
     ? await db.select().from(users).where(eq(users.id, profile.userId)).get()
     : undefined;
+
+  if (!user && !persist) {
+    return {
+      userId: "",
+      role,
+      institutionId,
+      name: profile.fullName,
+      contactEmail: profile.contactEmail,
+      accountStatus: "PRE_PROVISIONED",
+      isActive: profile.isActive,
+    };
+  }
 
   if (!user) {
     const userId = randomUUID();
@@ -247,7 +271,7 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
         set: { otpHash: await bcrypt.hash(otp, 12), expiresAt: Date.now() + otpExpiryMs, attempts: 0 },
       });
       await otpService.sendOtp(identity.contactEmail, otp);
-      await audit("ACTIVATION_REQUESTED", `Activation OTP requested for ${identity.userId}`);
+      await audit("ACTIVATION_REQUESTED", `Activation OTP requested for ${identity.institutionId}`);
       return res.status(202).json({ message: "An OTP was sent to the registered contact method" });
     } catch {
       return res.status(503).json({ error: "Activation is temporarily unavailable" });
@@ -272,7 +296,7 @@ export function createAuthRouter(options: AuthRouterOptions = {}): Router {
       return res.status(400).json({ error: "OTP is invalid or expired" });
     }
 
-    const identity = await resolveIdentity(institutionId);
+    const identity = await resolveIdentity(institutionId, { persist: true });
     if (!identity || !identity.isActive || identity.accountStatus === "ACTIVE") {
       await db.delete(otpSessions).where(eq(otpSessions.institutionId, institutionId));
       return res.status(400).json({ error: "Account is not eligible for activation" });

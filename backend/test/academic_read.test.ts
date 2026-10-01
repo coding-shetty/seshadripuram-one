@@ -5,9 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
 import {
   academicYears,
+  activationGrants,
   announcements,
+  authSessions,
   departments,
   enrollments,
+  importJobs,
   institutions,
   programs,
   sections,
@@ -54,6 +57,9 @@ describe('academic data scoping across institutions and sections', () => {
     await db.delete(announcements);
     await db.delete(students);
     await db.delete(teachers);
+    await db.delete(authSessions);
+    await db.delete(activationGrants);
+    await db.delete(importJobs);
     await db.delete(users);
     await db.delete(sections);
     await db.delete(semesters);
