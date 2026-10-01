@@ -54,15 +54,20 @@ export function createApp(options: AppOptions = {}) {
   app.use('/api/academic', academicRouter);
   app.use('/api/admin', adminRouter);
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-  app.get('/ready', async (_req, res) => {
+  const healthHandler = (_req: express.Request, res: express.Response) => res.json({ status: 'ok' });
+  const readyHandler = async (_req: express.Request, res: express.Response) => {
     try {
       await db.run(sql`SELECT 1`);
       return res.json({ status: 'ready' });
     } catch {
       return res.status(503).json({ status: 'not_ready' });
     }
-  });
+  };
+
+  app.get('/health', healthHandler);
+  app.get('/healthz', healthHandler);
+  app.get('/ready', readyHandler);
+  app.get('/readyz', readyHandler);
 
   app.use((_req, res) => {
     const requestId = (res.locals.requestId as string | undefined) || 'unknown';
