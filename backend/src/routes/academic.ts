@@ -130,7 +130,17 @@ export async function resolveCallerAcademicContext(
   };
 }
 
+const listAnnouncementsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1, 'Limit must be at least 1').max(100, 'Limit cannot exceed 100').default(20),
+});
+
 academicRouter.get('/announcements', requireAuthentication, async (req, res) => {
+  const queryResult = listAnnouncementsQuerySchema.safeParse(req.query);
+  if (!queryResult.success) {
+    return res.status(400).json({ error: queryResult.error.issues[0]?.message ?? 'Invalid query parameters' });
+  }
+  const { limit } = queryResult.data;
+
   const role = req.auth!.role;
   const ctx = await resolveCallerAcademicContext(req.auth!.sub, role, req.auth!.institutionId);
 
@@ -172,7 +182,7 @@ academicRouter.get('/announcements', requireAuthentication, async (req, res) => 
     .from(announcements)
     .where(and(...conditions))
     .orderBy(desc(announcements.publishedAt))
-    .limit(20);
+    .limit(limit);
 
   return res.json({ announcements: rows });
 });
@@ -235,7 +245,17 @@ academicRouter.post('/announcements', requireAuthentication, requireRole('TEACHE
   return res.status(201).json({ status: 'created', id });
 });
 
+const listTimetableQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1, 'Limit must be at least 1').max(100, 'Limit cannot exceed 100').default(100),
+});
+
 academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
+  const queryResult = listTimetableQuerySchema.safeParse(req.query);
+  if (!queryResult.success) {
+    return res.status(400).json({ error: queryResult.error.issues[0]?.message ?? 'Invalid query parameters' });
+  }
+  const { limit } = queryResult.data;
+
   const role = req.auth!.role;
   const ctx = await resolveCallerAcademicContext(req.auth!.sub, role, req.auth!.institutionId);
 
@@ -283,7 +303,7 @@ academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
     .from(timetableEntries)
     .where(and(...conditions))
     .orderBy(asc(timetableEntries.dayOfWeek), asc(timetableEntries.startTime))
-    .limit(100);
+    .limit(limit);
 
   return res.json({ timetable: rows });
 });
