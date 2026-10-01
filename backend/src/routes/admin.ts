@@ -26,7 +26,7 @@ adminRouter.post('/imports/preview', requireAuthentication, requireRole('ADMIN')
     return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Entity is required' });
   }
   const { entity, rows } = parseResult.data;
-  const preview = validateImportPreview(entity, rows);
+  const preview = await validateImportPreview(entity, rows);
   if ('error' in preview) return res.status(400).json(preview);
 
   const jobId = createOpaqueToken();
@@ -73,14 +73,42 @@ adminRouter.post('/imports/:id/commit', requireAuthentication, requireRole('ADMI
       await markImportCommitted(tx, job.id, req.auth!.sub, job.entity as ImportEntity, count);
       return count;
     });
-    return res.json({ importJobId: job.id, status: 'COMMITTED', insertedRows });
+    return res.json({
+      importJobId: job.id,
+      status: 'COMMITTED',
+      insertedRows,
+      transactionMode: 'ALL_OR_NOTHING',
+      message: `Successfully committed ${insertedRows} ${job.entity} record(s) in an all-or-nothing transaction.`,
+    });
   } catch (error) {
+    let failedRow: { row: number; fields?: string[]; message: string } | undefined;
+    let errorMessage = 'Import could not be committed. Create a new preview and try again.';
+
     if (error instanceof ImportCommitError) {
-      const status = error.code === 'CONFLICT' ? 409 : 422;
-      return res.status(status).json({ error: error.message });
+      errorMessage = error.message;
+      if (error.rowNumber) {
+        failedRow = { row: error.rowNumber, fields: error.fields ?? [], message: error.message };
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
     }
-    console.error(JSON.stringify({ event: 'academic_import_commit_failed', importJobId: job.id, actorUserId: req.auth!.sub }));
-    return res.status(409).json({ error: 'Import could not be committed. Create a new preview and try again.' });
+
+    const failedErrors = failedRow ? [failedRow] : [{ row: 0, fields: [], message: errorMessage }];
+
+    await db.update(importJobs).set({
+      status: 'FAILED',
+      errorsJson: JSON.stringify(failedErrors),
+    }).where(eq(importJobs.id, job.id));
+
+    console.error(JSON.stringify({ event: 'academic_import_commit_failed', importJobId: job.id, actorUserId: req.auth!.sub, error: errorMessage }));
+
+    return res.status(409).json({
+      error: errorMessage,
+      status: 'FAILED',
+      transactionMode: 'ALL_OR_NOTHING',
+      message: 'Import failed in an all-or-nothing transaction. No records were committed.',
+      failedErrors,
+    });
   }
 });
 
