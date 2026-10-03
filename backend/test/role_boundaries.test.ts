@@ -152,7 +152,7 @@ describe('Role boundaries & authorization matrix across all protected endpoints'
   });
 
   describe('TEACHER role boundaries', () => {
-    it('allows academic write routes (announcements 201, attendance 501 stub)', async () => {
+    it('allows academic write routes (announcements 201, attendance accessible to teacher)', async () => {
       const ann = await request(app)
         .post('/api/academic/announcements')
         .set('Authorization', `Bearer ${teacherToken}`)
@@ -160,7 +160,8 @@ describe('Role boundaries & authorization matrix across all protected endpoints'
       expect(ann.status).toBe(201);
 
       const att = await request(app).post('/api/academic/attendance').set('Authorization', `Bearer ${teacherToken}`).send({});
-      expect(att.status).toBe(501);
+      expect(att.status).not.toBe(403);
+      expect(att.status).toBe(400); // 400 validation error on empty body, not 403 forbidden
     });
 
     it('forbids all /api/admin/imports routes with 403', async () => {

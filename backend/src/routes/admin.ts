@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { db } from '../db';
-import { importJobs } from '../db/schema';
+import { auditLogs, departments, importJobs, programs, sections, students, teachers } from '../db/schema';
 import { commitImport, ImportCommitError, isCommitSupported, markImportCommitted } from '../services/importCommit';
 import type { ImportEntity } from '../services/importValidation';
 import { z } from 'zod';
@@ -10,6 +10,59 @@ import { validateImportPreview } from '../services/importValidation';
 import { createOpaqueToken } from '../services/tokenService';
 
 export const adminRouter = Router();
+
+adminRouter.get('/stats', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
+  const studentsCountResult = await db.select({ count: count() }).from(students).where(eq(students.isActive, true));
+  const activeStudents = studentsCountResult[0]?.count ?? 0;
+
+  const teachersCountResult = await db.select({ count: count() }).from(teachers).where(eq(teachers.isActive, true));
+  const facultyMembers = teachersCountResult[0]?.count ?? 0;
+
+  const importsCountResult = await db.select({ count: count() }).from(importJobs).where(eq(importJobs.status, 'PREVIEWED'));
+  const pendingImports = importsCountResult[0]?.count ?? 0;
+
+  const sectionsCountResult = await db.select({ count: count() }).from(sections).where(eq(sections.isActive, true));
+  const activeSections = sectionsCountResult[0]?.count ?? 0;
+
+  return res.json({
+    stats: {
+      activeStudents,
+      facultyMembers,
+      pendingImports,
+      activeSections,
+    },
+  });
+});
+
+adminRouter.get('/audit-logs', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
+  const logs = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      details: auditLogs.details,
+      timestamp: auditLogs.timestamp,
+    })
+    .from(auditLogs)
+    .orderBy(desc(auditLogs.timestamp))
+    .limit(50);
+
+  return res.json({ logs });
+});
+
+adminRouter.get('/structure', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
+  const institutionId = req.auth!.institutionId;
+  const deptWhere = institutionId ? eq(departments.institutionId, institutionId) : undefined;
+
+  const deptList = await db.select().from(departments).where(deptWhere);
+  const progList = await db.select().from(programs);
+  const sectList = await db.select().from(sections);
+
+  return res.json({
+    departments: deptList,
+    programs: progList,
+    sections: sectList,
+  });
+});
 
 const previewSchema = z.object({
   entity: z.string().trim().min(1, 'Entity is required'),

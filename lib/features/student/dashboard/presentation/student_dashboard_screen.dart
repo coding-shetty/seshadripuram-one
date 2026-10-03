@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/dashboard_components.dart';
+import '../../../academic/presentation/academic_providers.dart';
 import '../../../academic/presentation/live_academic_sections.dart';
 import '../../../auth/presentation/auth_providers.dart';
 
@@ -16,6 +17,15 @@ class StudentDashboardScreen extends ConsumerWidget {
     final displayName = user?.name.isNotEmpty == true ? user!.name : 'Student';
     final roleSubtitle = user != null ? 'Student • ${user.institutionId}' : 'BCA • Semester 4 • Section A';
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
+
+    final attendanceAsync = ref.watch(attendanceProvider);
+    final attendanceValue = attendanceAsync.when(
+      data: (summary) => summary.overall.totalClasses > 0
+          ? '${summary.overall.percentage.toStringAsFixed(1)}%'
+          : '100% (New)',
+      loading: () => '...',
+      error: (_, _) => '--',
+    );
 
     return DashboardShell(
       title: 'Good morning, $displayName',
@@ -38,13 +48,21 @@ class StudentDashboardScreen extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 720;
-          const stats = Wrap(
+          final stats = Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
             children: [
-              SizedBox(width: 180, child: StatCard(label: 'Attendance (Demo data)', value: '86%', icon: Icons.event_available, accent: AppColors.success)),
-              SizedBox(width: 180, child: StatCard(label: 'Next deadline (Demo data)', value: '2 days', icon: Icons.schedule, accent: AppColors.warning)),
-              SizedBox(width: 180, child: StatCard(label: 'Unread notices (Demo data)', value: '4', icon: Icons.notifications_active_outlined, accent: AppColors.gold500)),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Attendance',
+                  value: attendanceValue,
+                  icon: Icons.event_available,
+                  accent: AppColors.success,
+                ),
+              ),
+              const SizedBox(width: 180, child: StatCard(label: 'Next deadline (Demo data)', value: '2 days', icon: Icons.schedule, accent: AppColors.warning)),
+              const SizedBox(width: 180, child: StatCard(label: 'Unread notices (Demo data)', value: '4', icon: Icons.notifications_active_outlined, accent: AppColors.gold500)),
             ],
           );
           const schedule = LiveTimetableSection(limit: 2);

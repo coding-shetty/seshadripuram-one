@@ -5,6 +5,7 @@ import { db } from "../src/db";
 import {
   activationGrants,
   announcements,
+  attendanceRecords,
   auditLogs,
   authSessions,
   enrollments,
@@ -57,6 +58,7 @@ beforeEach(async () => {
   await db.delete(auditLogs);
   await db.delete(importJobs);
   await db.delete(announcements);
+  await db.delete(attendanceRecords);
   await db.delete(enrollments);
   await db.delete(teachingAssignments);
   await db.delete(timetableEntries);
@@ -116,7 +118,8 @@ describe("authentication activation flow", () => {
     const studentLogin = await request(app).post("/api/auth/login").send({ institutionId: "S-001", password: "secure-password-123" }).expect(200);
     const teacherLogin = await request(app).post("/api/auth/login").send({ institutionId: "T-001", password: "secure-password-123" }).expect(200);
     await request(app).post("/api/academic/attendance").set("Authorization", `Bearer ${studentLogin.body.accessToken}`).expect(403);
-    await request(app).post("/api/academic/attendance").set("Authorization", `Bearer ${teacherLogin.body.accessToken}`).expect(501);
+    const teacherRes = await request(app).post("/api/academic/attendance").set("Authorization", `Bearer ${teacherLogin.body.accessToken}`);
+    expect(teacherRes.status).not.toBe(403);
   });
 
   it("limits OTP verification attempts", async () => {

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/dashboard_components.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../presentation/admin_providers.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -16,18 +17,23 @@ class AdminDashboardScreen extends ConsumerWidget {
     final roleSubtitle = user != null ? 'Administration • ${user.institutionId}' : 'Seshadripuram College • Administration';
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A';
 
+    final statsAsync = ref.watch(adminStatsProvider);
+    final logsAsync = ref.watch(adminAuditLogsProvider);
+
     return DashboardShell(
       title: 'Welcome, $displayName',
       subtitle: roleSubtitle,
       actions: [
         IconButton(
           onPressed: () {
+            ref.invalidate(adminStatsProvider);
+            ref.invalidate(adminAuditLogsProvider);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications coming soon')),
+              const SnackBar(content: Text('Dashboard refreshed')),
             );
           },
-          icon: const Icon(Icons.notifications_none),
-          tooltip: 'Notifications',
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh',
         ),
         CircleAvatar(
           backgroundColor: AppColors.gold500,
@@ -51,11 +57,58 @@ class AdminDashboardScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        const Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-          SizedBox(width: 180, child: StatCard(label: 'Active students (Demo data)', value: '1,248', icon: Icons.school_outlined, accent: AppColors.navy800)),
-          SizedBox(width: 180, child: StatCard(label: 'Faculty members (Demo data)', value: '86', icon: Icons.people_outline, accent: AppColors.gold500)),
-          SizedBox(width: 180, child: StatCard(label: 'Pending imports (Demo data)', value: '2', icon: Icons.file_upload_outlined, accent: AppColors.warning)),
-        ]),
+        statsAsync.when(
+          data: (stats) => Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Active students',
+                  value: '${stats.activeStudents}',
+                  icon: Icons.school_outlined,
+                  accent: AppColors.navy800,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Faculty members',
+                  value: '${stats.facultyMembers}',
+                  icon: Icons.people_outline,
+                  accent: AppColors.gold500,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Pending imports',
+                  value: '${stats.pendingImports}',
+                  icon: Icons.file_upload_outlined,
+                  accent: AppColors.warning,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Active sections',
+                  value: '${stats.activeSections}',
+                  icon: Icons.group_work_outlined,
+                  accent: AppColors.success,
+                ),
+              ),
+            ],
+          ),
+          loading: () => const LinearProgressIndicator(),
+          error: (err, _) => Card(
+            color: AppColors.danger.withAlpha(20),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Text('Failed to load stats: $err', style: const TextStyle(color: AppColors.danger)),
+            ),
+          ),
+        ),
         const SizedBox(height: AppSpacing.xl),
         Text('Administration tools', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AppSpacing.sm),
@@ -66,15 +119,49 @@ class AdminDashboardScreen extends ConsumerWidget {
           OutlinedButton.icon(onPressed: () => context.push('/admin/audit-logs'), icon: const Icon(Icons.history), label: const Text('Audit logs')),
         ]),
         const SizedBox(height: AppSpacing.xl),
-        const DashboardSection(
-          title: 'Recent activity (Demo data)',
-          child: Column(children: [
-            AnnouncementTile(title: 'Student data import requires review', date: 'Today • 42 rows need attention'),
-            SizedBox(height: AppSpacing.sm),
-            AnnouncementTile(title: 'Academic year 2026–27 structure prepared', date: 'Yesterday • Draft configuration'),
-          ]),
+        DashboardSection(
+          title: 'Recent activity',
+          child: logsAsync.when(
+            data: (logs) {
+              if (logs.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.lg),
+                    child: Center(
+                      child: Text('No system activity recorded yet. Recent events will appear here.'),
+                    ),
+                  ),
+                );
+              }
+              return Column(
+                children: logs.take(5).map((l) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: AnnouncementTile(
+                      title: l.action,
+                      date: '${l.timestamp ?? "Recent"} • ${l.details ?? ""}',
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (err, _) => Card(
+              color: AppColors.danger.withAlpha(20),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Text('Failed to load activity logs: $err', style: const TextStyle(color: AppColors.danger)),
+              ),
+            ),
+          ),
         ),
       ]),
     );
   }
 }
+

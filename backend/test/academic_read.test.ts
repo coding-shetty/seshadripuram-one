@@ -7,6 +7,7 @@ import {
   academicYears,
   activationGrants,
   announcements,
+  attendanceRecords,
   authSessions,
   departments,
   enrollments,
@@ -50,6 +51,7 @@ describe('academic data scoping across institutions and sections', () => {
   let announcementInstBId: string;
 
   async function cleanupAll() {
+    await db.delete(attendanceRecords);
     await db.delete(teachingAssignments);
     await db.delete(enrollments);
     await db.delete(subjectOfferings);

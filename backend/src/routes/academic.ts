@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import {
   announcements,
+  attendanceRecords,
   auditLogs,
   departments,
   enrollments,
@@ -13,9 +14,11 @@ import {
   sections,
   students,
   subjectOfferings,
+  subjects,
   teachers,
   teachingAssignments,
   timetableEntries,
+  users,
 } from '../db/schema';
 import { requireAuthentication, requireRole } from '../middleware/auth';
 import type { AppRole } from '../services/tokenService';
@@ -308,28 +311,282 @@ academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
   return res.json({ timetable: rows });
 });
 
+academicRouter.get('/sections/:sectionId/students', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const sectionId = typeof req.params.sectionId === 'string' ? req.params.sectionId.trim() : '';
+  if (!sectionId) {
+    return res.status(400).json({ error: 'Section ID is required' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to view students for this section' });
+    }
+  }
+
+  const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+  if (!section) {
+    return res.status(404).json({ error: 'Section not found' });
+  }
+
+  const enrolled = await db
+    .select({
+      id: students.id,
+      studentId: students.studentId,
+      fullName: students.fullName,
+      contactEmail: students.contactEmail,
+    })
+    .from(enrollments)
+    .innerJoin(students, eq(enrollments.studentId, students.id))
+    .where(and(eq(enrollments.sectionId, sectionId), eq(enrollments.status, 'ACTIVE')))
+    .orderBy(asc(students.studentId));
+
+  return res.json({
+    section: { id: section.id, name: section.name },
+    students: enrolled,
+  });
+});
+
 const postAttendanceSchema = z.object({
-  sectionId: z.string().trim().optional(),
+  sectionId: z.string().trim().min(1, 'sectionId is required'),
   subjectId: z.string().trim().optional(),
-  date: z.string().trim().optional(),
-  records: z.array(z.object({
-    studentId: z.string().trim(),
-    status: z.enum(['PRESENT', 'ABSENT', 'LATE']),
-  })).optional(),
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  period: z.coerce.number().int().min(1).max(12).default(1),
+  records: z.array(
+    z.object({
+      studentId: z.string().trim().min(1, 'studentId is required'),
+      status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
+      remarks: z.string().trim().max(250).optional(),
+    })
+  ).min(1, 'At least one student record is required'),
 });
 
 academicRouter.post('/attendance', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
-  const result = postAttendanceSchema.safeParse(req.body ?? {});
-  if (!result.success) {
-    return res.status(400).json({ error: result.error.issues[0]?.message ?? 'Invalid request body' });
-  }
-
-  if (req.auth!.role === 'TEACHER' && result.data.sectionId) {
+  const reqSectionId = typeof req.body?.sectionId === 'string' ? req.body.sectionId.trim() : undefined;
+  if (req.auth!.role === 'TEACHER' && reqSectionId) {
     const ctx = await resolveCallerAcademicContext(req.auth!.sub, 'TEACHER', req.auth!.institutionId);
-    if (!ctx.sectionIds.includes(result.data.sectionId)) {
+    if (!ctx.sectionIds.includes(reqSectionId)) {
       return res.status(403).json({ error: 'You are not authorized to manage attendance for this section' });
     }
   }
 
-  return res.status(501).json({ error: 'Attendance entry is not implemented yet' });
+  const result = postAttendanceSchema.safeParse(req.body ?? {});
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.issues[0]?.message ?? 'Invalid request body' });
+  }
+  const { sectionId, subjectId, date, period, records } = result.data;
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to record attendance for this section' });
+    }
+  }
+
+  const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+  if (!section) {
+    return res.status(404).json({ error: 'Section not found' });
+  }
+
+  const institutionId = ctx.institutionId || req.auth!.institutionId;
+
+  await db.transaction(async (tx) => {
+    for (const rec of records) {
+      const existing = await tx
+        .select({ id: attendanceRecords.id })
+        .from(attendanceRecords)
+        .where(
+          and(
+            eq(attendanceRecords.sectionId, sectionId),
+            eq(attendanceRecords.date, date),
+            eq(attendanceRecords.period, period),
+            eq(attendanceRecords.studentId, rec.studentId)
+          )
+        )
+        .get();
+
+      if (existing) {
+        await tx
+          .update(attendanceRecords)
+          .set({
+            status: rec.status,
+            remarks: rec.remarks ?? null,
+            subjectId: subjectId ?? null,
+            teacherId: ctx.teacherId ?? null,
+            recordedByUserId: req.auth!.sub,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(attendanceRecords.id, existing.id));
+      } else {
+        await tx.insert(attendanceRecords).values({
+          id: randomUUID(),
+          institutionId: institutionId ?? null,
+          sectionId,
+          subjectId: subjectId ?? null,
+          teacherId: ctx.teacherId ?? null,
+          date,
+          period,
+          studentId: rec.studentId,
+          status: rec.status,
+          remarks: rec.remarks ?? null,
+          recordedByUserId: req.auth!.sub,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    await tx.insert(auditLogs).values({
+      id: randomUUID(),
+      action: 'ATTENDANCE_RECORDED',
+      details: JSON.stringify({
+        sectionId,
+        date,
+        period,
+        subjectId: subjectId ?? null,
+        recordCount: records.length,
+        recordedByUserId: req.auth!.sub,
+      }),
+    });
+  });
+
+  return res.status(201).json({
+    status: 'recorded',
+    recordedCount: records.length,
+    sectionId,
+    date,
+    period,
+  });
+});
+
+const getAttendanceQuerySchema = z.object({
+  sectionId: z.string().trim().optional(),
+  date: z.string().trim().optional(),
+  period: z.coerce.number().int().optional(),
+  subjectId: z.string().trim().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+academicRouter.get('/attendance', requireAuthentication, async (req, res) => {
+  const queryResult = getAttendanceQuerySchema.safeParse(req.query);
+  if (!queryResult.success) {
+    return res.status(400).json({ error: queryResult.error.issues[0]?.message ?? 'Invalid query parameters' });
+  }
+
+  const role = req.auth!.role;
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, role, req.auth!.institutionId);
+
+  if (role === 'STUDENT') {
+    if (!ctx.studentId) {
+      return res.json({
+        overall: { totalClasses: 0, attendedClasses: 0, absentClasses: 0, percentage: 100 },
+        bySubject: [],
+        recentRecords: [],
+      });
+    }
+
+    const records = await db
+      .select({
+        id: attendanceRecords.id,
+        date: attendanceRecords.date,
+        period: attendanceRecords.period,
+        status: attendanceRecords.status,
+        remarks: attendanceRecords.remarks,
+        subjectId: attendanceRecords.subjectId,
+      })
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.studentId, ctx.studentId))
+      .orderBy(desc(attendanceRecords.date), desc(attendanceRecords.period));
+
+    const totalClasses = records.length;
+    const attendedClasses = records.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
+    const absentClasses = records.filter((r) => r.status === 'ABSENT').length;
+    const percentage = totalClasses > 0 ? Number(((attendedClasses / totalClasses) * 100).toFixed(1)) : 100.0;
+
+    const allSubjects = await db.select().from(subjects);
+    const subjectMap = new Map(allSubjects.map((s) => [s.id, s]));
+
+    const subjectGroup = new Map<string, { total: number; attended: number }>();
+    for (const r of records) {
+      const subId = r.subjectId || 'GENERAL';
+      const cur = subjectGroup.get(subId) || { total: 0, attended: 0 };
+      cur.total++;
+      if (r.status === 'PRESENT' || r.status === 'LATE') cur.attended++;
+      subjectGroup.set(subId, cur);
+    }
+
+    const bySubject = Array.from(subjectGroup.entries()).map(([subId, stats]) => {
+      const subject = subjectMap.get(subId);
+      const subPercentage = stats.total > 0 ? Number(((stats.attended / stats.total) * 100).toFixed(1)) : 100.0;
+      return {
+        subjectId: subId,
+        subjectName: subject?.name ?? (subId === 'GENERAL' ? 'General Academic' : 'Class Session'),
+        subjectCode: subject?.code ?? 'GEN',
+        totalClasses: stats.total,
+        attendedClasses: stats.attended,
+        percentage: subPercentage,
+      };
+    });
+
+    const recentRecords = records.slice(0, 20).map((r) => ({
+      id: r.id,
+      date: r.date,
+      period: r.period,
+      status: r.status,
+      remarks: r.remarks,
+      subjectName: subjectMap.get(r.subjectId ?? '')?.name ?? 'Class Session',
+    }));
+
+    return res.json({
+      overall: {
+        totalClasses,
+        attendedClasses,
+        absentClasses,
+        percentage,
+      },
+      bySubject,
+      recentRecords,
+    });
+  }
+
+  // Teacher or Admin query
+  const { sectionId, date, period, subjectId, limit } = queryResult.data;
+  if (role === 'TEACHER') {
+    if (sectionId && !ctx.sectionIds.includes(sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to view attendance for this section' });
+    }
+  }
+
+  const conditions = [];
+  if (sectionId) conditions.push(eq(attendanceRecords.sectionId, sectionId));
+  if (date) conditions.push(eq(attendanceRecords.date, date));
+  if (period) conditions.push(eq(attendanceRecords.period, period));
+  if (subjectId) conditions.push(eq(attendanceRecords.subjectId, subjectId));
+
+  if (conditions.length === 0) {
+    if (role === 'TEACHER' && ctx.sectionIds.length > 0) {
+      conditions.push(inArray(attendanceRecords.sectionId, ctx.sectionIds));
+    }
+  }
+
+  const rows = await db
+    .select({
+      id: attendanceRecords.id,
+      sectionId: attendanceRecords.sectionId,
+      studentId: attendanceRecords.studentId,
+      studentName: students.fullName,
+      studentInstitutionId: students.studentId,
+      date: attendanceRecords.date,
+      period: attendanceRecords.period,
+      status: attendanceRecords.status,
+      remarks: attendanceRecords.remarks,
+      subjectId: attendanceRecords.subjectId,
+    })
+    .from(attendanceRecords)
+    .innerJoin(students, eq(attendanceRecords.studentId, students.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(attendanceRecords.date), desc(attendanceRecords.period))
+    .limit(limit);
+
+  return res.json({ attendance: rows });
 });

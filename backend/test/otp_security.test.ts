@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
 import { db } from '../src/db';
-import { otpSessions, users, students, authSessions, activationGrants, enrollments, teachingAssignments, timetableEntries, auditLogs, teachers, announcements, importJobs } from '../src/db/schema';
+import { otpSessions, users, students, authSessions, activationGrants, enrollments, teachingAssignments, timetableEntries, auditLogs, teachers, announcements, importJobs, attendanceRecords } from '../src/db/schema';
 import { createApp } from '../src';
 import { eq } from 'drizzle-orm';
 import { SmtpOtpService } from '../src/services/otpService';
@@ -18,6 +18,7 @@ describe('OTP security and verification lifecycle', () => {
     await db.delete(auditLogs);
     await db.delete(announcements);
     await db.delete(importJobs);
+    await db.delete(attendanceRecords);
     await db.delete(enrollments);
     await db.delete(teachingAssignments);
     await db.delete(timetableEntries);
