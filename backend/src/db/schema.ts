@@ -261,3 +261,24 @@ export const timetableEntries = sqliteTable('timetable_entries', {
   index('timetable_section_id_idx').on(table.sectionId),
   index('timetable_teacher_id_idx').on(table.teacherId),
 ]);
+
+export const attendanceRecords = sqliteTable('attendance_records', {
+  id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  sectionId: text('section_id').notNull().references(() => sections.id),
+  subjectId: text('subject_id').references(() => subjects.id),
+  teacherId: text('teacher_id').references(() => teachers.id),
+  date: text('date').notNull(),
+  period: integer('period').notNull().default(1),
+  studentId: text('student_id').notNull().references(() => students.id),
+  status: text('status').notNull(), // 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
+  remarks: text('remarks'),
+  recordedByUserId: text('recorded_by_user_id').references(() => users.id),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex('attendance_unique_entry_idx').on(table.sectionId, table.date, table.period, table.studentId),
+  index('attendance_student_idx').on(table.studentId, table.date),
+  index('attendance_section_idx').on(table.sectionId, table.date),
+  index('attendance_subject_idx').on(table.subjectId),
+]);

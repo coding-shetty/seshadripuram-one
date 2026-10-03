@@ -26,6 +26,14 @@ async function seed() {
     console.log("TEST-TEACHER-001 might already exist");
   }
 
+  try {
+    const userId = uuidv4();
+    await db.insert(users).values({ id: userId, institutionId: "TEST-ADMIN-001", role: "ADMIN", contactEmail: "admin@example.com" });
+    console.log("Inserted TEST-ADMIN-001");
+  } catch (e) {
+    console.log("TEST-ADMIN-001 might already exist");
+  }
+
   if ((await db.select({ id: announcements.id }).from(announcements).limit(1)).length === 0) {
     await db.insert(announcements).values([
       { id: uuidv4(), title: "Examination timetable published", body: "The examination timetable is now available for review.", category: "ACADEMIC", audienceRole: "ALL", publishedAt: "2026-08-22T09:00:00.000Z", isPublished: true },

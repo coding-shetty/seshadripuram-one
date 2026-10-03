@@ -12,5 +12,9 @@ class AppConfig {
   static const String configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
   static String? debugBaseUrl;
 
-  static String get baseUrl => debugBaseUrl ?? configuredBaseUrl;
+  static String get baseUrl {
+    if (debugBaseUrl != null && debugBaseUrl!.isNotEmpty) return debugBaseUrl!;
+    if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
+    return 'http://localhost:8080';
+  }
 }

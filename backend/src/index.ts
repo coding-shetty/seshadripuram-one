@@ -42,7 +42,9 @@ export function createApp(options: AppOptions = {}) {
   app.use(cors({
     origin(origin, callback) {
       // Native mobile clients commonly omit Origin. Browser clients must be allow-listed.
-      if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
+      if (!origin || config.corsOrigins.includes(origin) || (config.nodeEnv === 'development' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
+        return callback(null, true);
+      }
       return callback(new Error('Origin is not allowed'));
     },
   }));

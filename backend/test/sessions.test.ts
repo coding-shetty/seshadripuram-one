@@ -6,6 +6,7 @@ import { db } from '../src/db';
 import {
   activationGrants,
   announcements,
+  attendanceRecords,
   authSessions,
   enrollments,
   importJobs,
@@ -28,6 +29,7 @@ describe('session rotation reuse detection and cleanup', () => {
     await db.delete(announcements);
     await db.delete(timetableEntries);
     await db.delete(teachingAssignments);
+    await db.delete(attendanceRecords);
     await db.delete(enrollments);
     await db.delete(students);
     await db.delete(teachers);

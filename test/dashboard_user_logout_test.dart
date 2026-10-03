@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:seshadripuram_one/features/academic/domain/academic_models.dart';
 import 'package:seshadripuram_one/features/academic/presentation/academic_providers.dart';
 import 'package:seshadripuram_one/features/auth/data/auth_repository.dart';
 import 'package:seshadripuram_one/features/auth/domain/app_user.dart';
@@ -30,6 +31,16 @@ void main() {
           currentUserProvider.overrideWithValue(testUser),
           announcementsProvider.overrideWith((ref) async => const []),
           timetableProvider.overrideWith((ref) async => const []),
+          attendanceProvider.overrideWith((ref) async => const AttendanceSummary(
+                overall: AttendanceOverall(
+                  totalClasses: 10,
+                  attendedClasses: 9,
+                  absentClasses: 1,
+                  percentage: 90.0,
+                ),
+                bySubject: [],
+                recentRecords: [],
+              )),
         ],
         child: const MaterialApp(
           home: StudentDashboardScreen(),

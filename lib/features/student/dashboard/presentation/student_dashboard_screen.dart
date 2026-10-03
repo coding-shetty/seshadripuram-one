@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/dashboard_components.dart';
+import '../../../academic/presentation/academic_providers.dart';
 import '../../../academic/presentation/live_academic_sections.dart';
 import '../../../auth/presentation/auth_providers.dart';
 
@@ -17,16 +18,21 @@ class StudentDashboardScreen extends ConsumerWidget {
     final roleSubtitle = user != null ? 'Student • ${user.institutionId}' : 'BCA • Semester 4 • Section A';
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
 
+    final attendanceAsync = ref.watch(attendanceProvider);
+    final attendanceValue = attendanceAsync.when(
+      data: (summary) => summary.overall.totalClasses > 0
+          ? '${summary.overall.percentage.toStringAsFixed(1)}%'
+          : '100% (New)',
+      loading: () => '...',
+      error: (_, _) => '--',
+    );
+
     return DashboardShell(
       title: 'Good morning, $displayName',
       subtitle: roleSubtitle,
       actions: [
         IconButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications coming soon')),
-            );
-          },
+          onPressed: () => context.push('/student/announcements'),
           icon: const Icon(Icons.notifications_none),
           tooltip: 'Notifications',
         ),
@@ -38,13 +44,40 @@ class StudentDashboardScreen extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 720;
-          const stats = Wrap(
+          final stats = Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
             children: [
-              SizedBox(width: 180, child: StatCard(label: 'Attendance (Demo data)', value: '86%', icon: Icons.event_available, accent: AppColors.success)),
-              SizedBox(width: 180, child: StatCard(label: 'Next deadline (Demo data)', value: '2 days', icon: Icons.schedule, accent: AppColors.warning)),
-              SizedBox(width: 180, child: StatCard(label: 'Unread notices (Demo data)', value: '4', icon: Icons.notifications_active_outlined, accent: AppColors.gold500)),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Attendance',
+                  value: attendanceValue,
+                  icon: Icons.event_available,
+                  accent: AppColors.success,
+                  onTap: () => context.push('/student/attendance'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Full Timetable',
+                  value: 'Live',
+                  icon: Icons.schedule,
+                  accent: AppColors.warning,
+                  onTap: () => context.push('/student/timetable'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Announcements',
+                  value: 'Notices',
+                  icon: Icons.notifications_active_outlined,
+                  accent: AppColors.gold500,
+                  onTap: () => context.push('/student/announcements'),
+                ),
+              ),
             ],
           );
           const schedule = LiveTimetableSection(limit: 2);
