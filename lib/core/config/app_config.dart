@@ -20,8 +20,10 @@ class AppConfig {
     if (kReleaseMode) {
       throw StateError('A release build requires --dart-define=API_BASE_URL=https://your-api-host');
     }
-    // Android emulators must use --dart-define=API_BASE_URL=http://10.0.2.2:3000.
-    return 'http://localhost:3000';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8080';
+    }
+    return 'http://localhost:8080';
   }
 
   static void validateApiUrl(String value, {required bool requireHttps}) {
