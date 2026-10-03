@@ -40,7 +40,7 @@ npm audit --audit-level=moderate
 python3 -m unittest discover -s scripts -p '*_test.py'
 ```
 
-Flutter:
+Flutter (CI pins **3.44.2** to match the committed SDK dependency lockfile):
 ```sh
 flutter pub get --enforce-lockfile
 flutter analyze

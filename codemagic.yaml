@@ -18,7 +18,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable
+      flutter: 3.44.2
     scripts:
       - name: Get packages
         script: flutter pub get
@@ -36,7 +36,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable
+      flutter: 3.44.2
     scripts:
       - name: Get packages
         script: flutter pub get
@@ -54,7 +54,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable
+      flutter: 3.44.2
     scripts:
       - name: Get packages
         script: flutter pub get
@@ -72,7 +72,7 @@ workflows:
     max_build_duration: 60
     instance_type: windows_x2
     environment:
-      flutter: stable
+      flutter: 3.44.2
     scripts:
       - name: Get packages
         script: flutter pub get
@@ -90,7 +90,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable
+      flutter: 3.44.2
       groups:
         - production_android
     scripts:
