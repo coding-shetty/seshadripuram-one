@@ -4,15 +4,29 @@ import { db } from '../db';
 import { importJobs } from '../db/schema';
 import { commitImport, ImportCommitError, isCommitSupported, markImportCommitted } from '../services/importCommit';
 import type { ImportEntity } from '../services/importValidation';
+import { z } from 'zod';
 import { requireAuthentication, requireRole } from '../middleware/auth';
 import { validateImportPreview } from '../services/importValidation';
 import { createOpaqueToken } from '../services/tokenService';
 
 export const adminRouter = Router();
 
+const previewSchema = z.object({
+  entity: z.string().trim().min(1, 'Entity is required'),
+  rows: z.unknown(),
+});
+
+const jobIdParamSchema = z.object({
+  id: z.string().trim().min(1, 'Import preview ID is required'),
+});
+
 adminRouter.post('/imports/preview', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const entity = typeof req.body?.entity === 'string' ? req.body.entity.trim() : '';
-  const preview = validateImportPreview(entity, req.body?.rows);
+  const parseResult = previewSchema.safeParse(req.body ?? {});
+  if (!parseResult.success) {
+    return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Entity is required' });
+  }
+  const { entity, rows } = parseResult.data;
+  const preview = await validateImportPreview(entity, rows);
   if ('error' in preview) return res.status(400).json(preview);
 
   const jobId = createOpaqueToken();
@@ -39,8 +53,9 @@ adminRouter.post('/imports/preview', requireAuthentication, requireRole('ADMIN')
 });
 
 adminRouter.post('/imports/:id/commit', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const jobId = typeof req.params.id === 'string' ? req.params.id : null;
-  if (!jobId) return res.status(400).json({ error: 'Import preview ID is required' });
+  const paramResult = jobIdParamSchema.safeParse(req.params);
+  if (!paramResult.success) return res.status(400).json({ error: 'Import preview ID is required' });
+  const jobId = paramResult.data.id;
 
   const job = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).get();
   if (!job || job.actorUserId !== req.auth!.sub) return res.status(404).json({ error: 'Import preview not found' });
@@ -58,20 +73,49 @@ adminRouter.post('/imports/:id/commit', requireAuthentication, requireRole('ADMI
       await markImportCommitted(tx, job.id, req.auth!.sub, job.entity as ImportEntity, count);
       return count;
     });
-    return res.json({ importJobId: job.id, status: 'COMMITTED', insertedRows });
+    return res.json({
+      importJobId: job.id,
+      status: 'COMMITTED',
+      insertedRows,
+      transactionMode: 'ALL_OR_NOTHING',
+      message: `Successfully committed ${insertedRows} ${job.entity} record(s) in an all-or-nothing transaction.`,
+    });
   } catch (error) {
+    let failedRow: { row: number; fields?: string[]; message: string } | undefined;
+    let errorMessage = 'Import could not be committed. Create a new preview and try again.';
+
     if (error instanceof ImportCommitError) {
-      const status = error.code === 'CONFLICT' ? 409 : 422;
-      return res.status(status).json({ error: error.message });
+      errorMessage = error.message;
+      if (error.rowNumber) {
+        failedRow = { row: error.rowNumber, fields: error.fields ?? [], message: error.message };
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
     }
-    console.error(JSON.stringify({ event: 'academic_import_commit_failed', importJobId: job.id, actorUserId: req.auth!.sub }));
-    return res.status(409).json({ error: 'Import could not be committed. Create a new preview and try again.' });
+
+    const failedErrors = failedRow ? [failedRow] : [{ row: 0, fields: [], message: errorMessage }];
+
+    await db.update(importJobs).set({
+      status: 'FAILED',
+      errorsJson: JSON.stringify(failedErrors),
+    }).where(eq(importJobs.id, job.id));
+
+    console.error(JSON.stringify({ event: 'academic_import_commit_failed', importJobId: job.id, actorUserId: req.auth!.sub, error: errorMessage }));
+
+    return res.status(409).json({
+      error: errorMessage,
+      status: 'FAILED',
+      transactionMode: 'ALL_OR_NOTHING',
+      message: 'Import failed in an all-or-nothing transaction. No records were committed.',
+      failedErrors,
+    });
   }
 });
 
 adminRouter.get('/imports/:id', requireAuthentication, requireRole('ADMIN'), async (req, res) => {
-  const jobId = typeof req.params.id === 'string' ? req.params.id : null;
-  if (!jobId) return res.status(400).json({ error: 'Import preview ID is required' });
+  const paramResult = jobIdParamSchema.safeParse(req.params);
+  if (!paramResult.success) return res.status(400).json({ error: 'Import preview ID is required' });
+  const jobId = paramResult.data.id;
   const job = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).get();
   if (!job || job.actorUserId !== req.auth!.sub) return res.status(404).json({ error: 'Import preview not found' });
 

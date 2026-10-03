@@ -36,6 +36,34 @@
       "when": 1787350545727,
       "tag": "0004_careless_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790862184920,
+      "tag": "0005_peaceful_black_panther",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790863562153,
+      "tag": "0006_peaceful_maggott",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790866537345,
+      "tag": "0007_flippant_odin",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790866792752,
+      "tag": "0008_unique_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

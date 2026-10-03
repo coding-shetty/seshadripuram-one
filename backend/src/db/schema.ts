@@ -36,7 +36,10 @@ export const auditLogs = sqliteTable("audit_logs", {
   action: text("action").notNull(),
   details: text("details"),
   timestamp: text("timestamp").default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => [
+  index("audit_logs_action_idx").on(table.action),
+  index("audit_logs_timestamp_idx").on(table.timestamp),
+]);
 
 export const otpSessions = sqliteTable("otp_sessions", {
   institutionId: text("institution_id").primaryKey(),
@@ -52,16 +55,25 @@ export const activationGrants = sqliteTable("activation_grants", {
   expiresAt: integer("expires_at").notNull(),
   usedAt: integer("used_at"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("activation_grants_user_id_idx").on(table.userId)]);
+}, (table) => [
+  index("activation_grants_user_id_idx").on(table.userId),
+  index("activation_grants_expires_at_idx").on(table.expiresAt),
+]);
 
 export const authSessions = sqliteTable("auth_sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
+  familyId: text("family_id"),
   refreshTokenHash: text("refresh_token_hash").notNull().unique(),
   expiresAt: integer("expires_at").notNull(),
   revokedAt: integer("revoked_at"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("auth_sessions_user_id_idx").on(table.userId)]);
+}, (table) => [
+  index("auth_sessions_user_id_idx").on(table.userId),
+  index("auth_sessions_family_id_idx").on(table.familyId),
+  index("auth_sessions_expires_at_idx").on(table.expiresAt),
+  index("auth_sessions_revoked_at_idx").on(table.revokedAt),
+]);
 
 
 export const institutions = sqliteTable('institutions', {
@@ -200,15 +212,20 @@ export const importJobs = sqliteTable('import_jobs', {
   invalidRows: integer('invalid_rows').notNull(),
   errorsJson: text('errors_json').notNull(),
   payloadJson: text('payload_json'),
+  purgedAt: text('purged_at'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index('import_jobs_actor_idx').on(table.actorUserId),
   index('import_jobs_created_idx').on(table.createdAt),
+  index('import_jobs_status_idx').on(table.status),
 ]);
 
 
 export const announcements = sqliteTable('announcements', {
   id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  departmentId: text('department_id').references(() => departments.id),
+  sectionId: text('section_id').references(() => sections.id),
   title: text('title').notNull(),
   body: text('body').notNull(),
   category: text('category').notNull().default('GENERAL'),
@@ -219,10 +236,16 @@ export const announcements = sqliteTable('announcements', {
 }, (table) => [
   index('announcements_published_idx').on(table.isPublished, table.publishedAt),
   index('announcements_audience_role_idx').on(table.audienceRole),
+  index('announcements_institution_idx').on(table.institutionId),
+  index('announcements_department_idx').on(table.departmentId),
+  index('announcements_section_idx').on(table.sectionId),
 ]);
 
 export const timetableEntries = sqliteTable('timetable_entries', {
   id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  sectionId: text('section_id').references(() => sections.id),
+  teacherId: text('teacher_id').references(() => teachers.id),
   dayOfWeek: integer('day_of_week').notNull(),
   startTime: text('start_time').notNull(),
   endTime: text('end_time').notNull(),
@@ -234,4 +257,7 @@ export const timetableEntries = sqliteTable('timetable_entries', {
 }, (table) => [
   index('timetable_day_idx').on(table.dayOfWeek, table.startTime),
   index('timetable_section_idx').on(table.sectionName),
+  index('timetable_institution_idx').on(table.institutionId),
+  index('timetable_section_id_idx').on(table.sectionId),
+  index('timetable_teacher_id_idx').on(table.teacherId),
 ]);

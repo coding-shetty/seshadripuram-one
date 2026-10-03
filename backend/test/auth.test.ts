@@ -2,7 +2,20 @@ import { eq } from "drizzle-orm";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../src/db";
-import { activationGrants, auditLogs, authSessions, otpSessions, students, teachers, users } from "../src/db/schema";
+import {
+  activationGrants,
+  announcements,
+  auditLogs,
+  authSessions,
+  enrollments,
+  importJobs,
+  otpSessions,
+  students,
+  teachers,
+  teachingAssignments,
+  timetableEntries,
+  users,
+} from "../src/db/schema";
 import { createApp } from "../src/index";
 
 const app = createApp();
@@ -42,6 +55,11 @@ beforeEach(async () => {
   await db.delete(activationGrants);
   await db.delete(otpSessions);
   await db.delete(auditLogs);
+  await db.delete(importJobs);
+  await db.delete(announcements);
+  await db.delete(enrollments);
+  await db.delete(teachingAssignments);
+  await db.delete(timetableEntries);
   await db.delete(students);
   await db.delete(teachers);
   await db.delete(users);
@@ -107,5 +125,46 @@ describe("authentication activation flow", () => {
       await request(app).post("/api/auth/verify-otp").send({ institutionId: "S-001", otp: "000000" }).expect(400);
     }
     await request(app).post("/api/auth/verify-otp").send({ institutionId: "S-001", otp: "000000" }).expect(429);
+  });
+
+  it("keeps activation requests read-only without creating user rows or linking profiles until OTP is verified", async () => {
+    await db.insert(students).values({
+      id: "unlinked-student-profile",
+      userId: null,
+      studentId: "S-999",
+      fullName: "Unlinked Student",
+      contactEmail: "unlinked@example.test",
+    });
+
+    // Request activation should be read-only
+    const otp = await requestOtp("S-999");
+
+    // Assert NO user row was created and student profile was NOT mutated
+    const userBeforeVerify = await db.select().from(users).where(eq(users.institutionId, "S-999")).get();
+    expect(userBeforeVerify).toBeUndefined();
+
+    const studentBeforeVerify = await db.select().from(students).where(eq(students.id, "unlinked-student-profile")).get();
+    expect(studentBeforeVerify?.userId).toBeNull();
+
+    // Now verify OTP -> only now should the user row be provisioned and linked
+    const verifyRes = await request(app).post("/api/auth/verify-otp").send({ institutionId: "S-999", otp });
+    expect(verifyRes.status).toBe(200);
+
+    const userAfterVerify = await db.select().from(users).where(eq(users.institutionId, "S-999")).get();
+    expect(userAfterVerify).toBeDefined();
+    expect(userAfterVerify?.role).toBe("STUDENT");
+
+    const studentAfterVerify = await db.select().from(students).where(eq(students.id, "unlinked-student-profile")).get();
+    expect(studentAfterVerify?.userId).toBe(userAfterVerify?.id);
+  });
+
+  it("returns the user's real display name on /api/auth/me instead of the institution ID", async () => {
+    await activate("S-001");
+    const login = await request(app).post("/api/auth/login").send({ institutionId: "S-001", password: "secure-password-123" }).expect(200);
+
+    const meRes = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${login.body.accessToken}`).expect(200);
+
+    expect(meRes.body.user.name).toBe("Test Student");
+    expect(meRes.body.user.name).not.toBe("S-001");
   });
 });

@@ -1,24 +1,43 @@
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { config } from './config';
 import { db } from './db';
 import { academicRouter } from './routes/academic';
 import { adminRouter } from './routes/admin';
-import { authRouter } from './routes/auth';
+import { createAuthRouter, type AuthRouterOptions } from './routes/auth';
 
-export function createApp() {
+import { logger, requestLoggerMiddleware } from './utils/logger';
+import { centralErrorHandler } from './utils/errors';
+
+export * from './utils/errors';
+export * from './utils/logger';
+export * from './utils/shutdown';
+
+export interface AppOptions extends AuthRouterOptions {}
+
+function parseTrustProxy(value: string): boolean | number | string {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  const num = Number(value);
+  if (!Number.isNaN(num)) return num;
+  return value;
+}
+
+export function createApp(options: AppOptions = {}) {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use((req, res, next) => {
-    const requestId = req.header('x-request-id')?.trim() || randomUUID();
-    res.setHeader('x-request-id', requestId);
-    res.locals.requestId = requestId;
-    next();
-  });
+  // Trust proxy configuration for correct client IP detection behind reverse proxies/NAT
+  app.set('trust proxy', parseTrustProxy(config.trustProxy));
+
+  // Security headers via Helmet
+  app.use(helmet());
+
+  // Structured request tracing and JSON logging
+  app.use(requestLoggerMiddleware);
 
   app.use(cors({
     origin(origin, callback) {
@@ -27,42 +46,49 @@ export function createApp() {
       return callback(new Error('Origin is not allowed'));
     },
   }));
+
+  // Raised body limit exclusively for administrative imports (e.g. 1000-row CSV/JSON previews)
+  app.use('/api/admin/imports', express.json({ limit: '5mb' }));
+
+  // Strict 32kb payload limit for all other routes to protect against memory exhaustion
   app.use(express.json({ limit: '32kb' }));
 
-  app.use('/api/auth', rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: () => process.env.NODE_ENV === 'test',
-    message: { error: 'Too many requests. Please try again later.' },
-  }), authRouter);
+  // Mount granularly rate-limited auth router
+  app.use('/api/auth', createAuthRouter(options));
   app.use('/api/academic', academicRouter);
   app.use('/api/admin', adminRouter);
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-  app.get('/ready', async (_req, res) => {
+  const healthHandler = (_req: express.Request, res: express.Response) => res.json({ status: 'ok' });
+  const readyHandler = async (_req: express.Request, res: express.Response) => {
     try {
       await db.run(sql`SELECT 1`);
       return res.json({ status: 'ready' });
     } catch {
       return res.status(503).json({ status: 'not_ready' });
     }
+  };
+
+  app.get('/health', healthHandler);
+  app.get('/healthz', healthHandler);
+  app.get('/ready', readyHandler);
+  app.get('/readyz', readyHandler);
+
+  app.use((_req, res) => {
+    const requestId = (res.locals.requestId as string | undefined) || 'unknown';
+    res.status(404).json({ code: 'NOT_FOUND', message: 'Not found', requestId, error: 'Not found' });
   });
 
-  app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
-  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const requestId = res.locals.requestId as string | undefined;
-    console.error(JSON.stringify({
-      event: 'unhandled_request_error',
-      requestId,
-      message: error instanceof Error ? error.message : 'Unknown error',
-    }));
-    res.status(500).json({ error: 'Internal server error', requestId });
-  });
+  // Centralized error handling
+  app.use(centralErrorHandler);
+
   return app;
 }
 
+import { setupGracefulShutdown } from './utils/shutdown';
+
 if (require.main === module) {
-  createApp().listen(config.port, () => console.info(`Server listening on port ${config.port}`));
+  const server = createApp().listen(config.port, () => {
+    logger.info({ event: 'server_started', port: config.port });
+  });
+  setupGracefulShutdown(server);
 }

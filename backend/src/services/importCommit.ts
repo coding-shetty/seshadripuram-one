@@ -1,16 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { auditLogs, importJobs, institutions, students, teachers, users } from '../db/schema';
-import type { ImportEntity } from './importValidation';
+import { isCommitSupported, type ImportEntity, type SupportedImportEntity } from './importValidation';
+
+export { isCommitSupported };
 
 export class ImportCommitError extends Error {
-  constructor(public readonly code: 'UNSUPPORTED_ENTITY' | 'INVALID_PREVIEW' | 'CONFLICT', message: string) {
+  constructor(
+    public readonly code: 'UNSUPPORTED_ENTITY' | 'INVALID_PREVIEW' | 'CONFLICT',
+    message: string,
+    public readonly rowNumber?: number,
+    public readonly fields?: string[]
+  ) {
     super(message);
   }
-}
-
-export function isCommitSupported(entity: ImportEntity): boolean {
-  return ['institutions', 'students', 'teachers'].includes(entity);
 }
 
 type ImportRow = Record<string, unknown>;
@@ -25,10 +28,16 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
   }
 
   if (entity === 'institutions') {
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!;
+      const code = value(row, 'code');
+      const existing = await tx.select({ id: institutions.id }).from(institutions).where(eq(institutions.code, code)).get();
+      if (existing) {
+        throw new ImportCommitError('CONFLICT', `Institution code ${code} already exists`, i + 1, ['code']);
+      }
       await tx.insert(institutions).values({
         id: randomUUID(),
-        code: value(row, 'code'),
+        code,
         name: value(row, 'name'),
         city: value(row, 'city') || null,
       });
@@ -36,7 +45,8 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
     return rows.length;
   }
 
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
     const institutionId = value(row, entity === 'students' ? 'studentId' : 'employeeId');
     const email = value(row, 'contactEmail');
     const fullName = value(row, 'fullName');
@@ -44,10 +54,15 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
 
     if (entity === 'students') {
       const existing = await tx.select({ id: students.id }).from(students).where(eq(students.studentId, institutionId)).get();
-      if (existing) throw new ImportCommitError('CONFLICT', `Student ID ${institutionId} already exists`);
+      if (existing) throw new ImportCommitError('CONFLICT', `Student ID ${institutionId} already exists`, i + 1, ['studentId']);
     } else {
       const existing = await tx.select({ id: teachers.id }).from(teachers).where(eq(teachers.employeeId, institutionId)).get();
-      if (existing) throw new ImportCommitError('CONFLICT', `Employee ID ${institutionId} already exists`);
+      if (existing) throw new ImportCommitError('CONFLICT', `Employee ID ${institutionId} already exists`, i + 1, ['employeeId']);
+    }
+
+    const userExisting = await tx.select({ id: users.id }).from(users).where(eq(users.institutionId, institutionId)).get();
+    if (userExisting) {
+      throw new ImportCommitError('CONFLICT', `User with ID ${institutionId} already exists`, i + 1, [entity === 'students' ? 'studentId' : 'employeeId']);
     }
 
     await tx.insert(users).values({
@@ -67,7 +82,11 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
 }
 
 export async function markImportCommitted(tx: any, jobId: string, actorUserId: string, entity: ImportEntity, count: number): Promise<void> {
-  await tx.update(importJobs).set({ status: 'COMMITTED' }).where(and(eq(importJobs.id, jobId), eq(importJobs.actorUserId, actorUserId)));
+  await tx.update(importJobs).set({
+    status: 'COMMITTED',
+    payloadJson: null,
+    purgedAt: new Date().toISOString(),
+  }).where(and(eq(importJobs.id, jobId), eq(importJobs.actorUserId, actorUserId)));
   await tx.insert(auditLogs).values({
     id: randomUUID(),
     action: 'ACADEMIC_IMPORT_COMMITTED',

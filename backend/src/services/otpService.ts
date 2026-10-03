@@ -1,3 +1,4 @@
+import nodemailer, { type Transporter } from 'nodemailer';
 import { randomInt } from 'node:crypto';
 import { config } from '../config';
 
@@ -6,7 +7,54 @@ export interface OtpService {
   sendOtp(destination: string, otp: string): Promise<void>;
 }
 
-class ConsoleOtpService implements OtpService {
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  from: string;
+  secure?: boolean;
+}
+
+export class SmtpOtpService implements OtpService {
+  private transporter: Transporter;
+  private from: string;
+
+  constructor(smtpConfig: SmtpConfig) {
+    this.from = smtpConfig.from;
+    this.transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure ?? (smtpConfig.port === 465),
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+    });
+  }
+
+  generateOtp(): string {
+    return randomInt(100000, 1000000).toString();
+  }
+
+  async sendOtp(destination: string, otp: string): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.from,
+      to: destination,
+      subject: 'Your Seshadripuram One verification code',
+      text: [
+        'Your Seshadripuram One verification code is:',
+        '',
+        otp,
+        '',
+        'This code expires in 10 minutes and can be used only once.',
+        'If you did not request account activation, you can ignore this email.',
+      ].join('\n'),
+    });
+  }
+}
+
+export class ConsoleOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -17,7 +65,7 @@ class ConsoleOtpService implements OtpService {
   }
 }
 
-class ResendOtpService implements OtpService {
+export class ResendOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -51,7 +99,7 @@ class ResendOtpService implements OtpService {
   }
 }
 
-class DisabledOtpService implements OtpService {
+export class DisabledOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -61,8 +109,16 @@ class DisabledOtpService implements OtpService {
   }
 }
 
-export function createOtpService(): OtpService {
-  if (config.otpProvider === 'console' && !config.isProduction) return new ConsoleOtpService();
-  if (config.otpProvider === 'resend') return new ResendOtpService();
+export function createOtpService(activeConfig: {
+  otpProvider?: string | undefined;
+  isProduction?: boolean | undefined;
+  smtp?: SmtpConfig | undefined;
+} = config): OtpService {
+  if (activeConfig.otpProvider === 'console' && !activeConfig.isProduction) return new ConsoleOtpService();
+  if (activeConfig.otpProvider === 'resend') return new ResendOtpService();
+  if ((activeConfig.otpProvider === 'smtp' || activeConfig.otpProvider === 'gmail') && activeConfig.smtp) {
+    return new SmtpOtpService(activeConfig.smtp);
+  }
   return new DisabledOtpService();
 }
+

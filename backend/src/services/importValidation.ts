@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { institutions, students, teachers, users } from '../db/schema';
+
 export const importEntities = [
   'institutions',
   'departments',
@@ -13,7 +17,13 @@ export const importEntities = [
   'teaching_assignments',
 ] as const;
 
+export const supportedImportEntities = ['institutions', 'students', 'teachers'] as const;
+export type SupportedImportEntity = (typeof supportedImportEntities)[number];
 export type ImportEntity = (typeof importEntities)[number];
+
+export function isCommitSupported(entity: string): entity is SupportedImportEntity {
+  return (supportedImportEntities as readonly string[]).includes(entity);
+}
 
 type ImportRow = Record<string, unknown>;
 
@@ -65,8 +75,6 @@ export interface ImportRowError {
   message: string;
 }
 
-export const committableImportEntities: ImportEntity[] = ['institutions', 'departments', 'students', 'teachers'];
-
 export interface ImportPreview {
   entity: ImportEntity;
   totalRows: number;
@@ -75,23 +83,28 @@ export interface ImportPreview {
   errors: ImportRowError[];
 }
 
-export function validateImportPreview(entity: string, rows: unknown): ImportPreview | { error: string } {
-  if (!importEntities.includes(entity as ImportEntity)) {
-    return { error: `Unsupported import entity. Use one of: ${importEntities.join(', ')}` };
+export async function validateImportPreview(
+  entity: string,
+  rows: unknown,
+  dbInstance: any = db
+): Promise<ImportPreview | { error: string }> {
+  if (!isCommitSupported(entity)) {
+    return { error: `Unsupported import entity: "${entity}". Supported entities for import and commit are: ${supportedImportEntities.join(', ')}` };
   }
   if (!Array.isArray(rows)) return { error: 'rows must be an array of objects' };
   if (rows.length > 1000) return { error: 'A single preview cannot contain more than 1000 rows' };
 
-  const typedEntity = entity as ImportEntity;
+  const typedEntity = entity as SupportedImportEntity;
   const required = requiredFields[typedEntity];
   const seen = new Set<string>();
   const errors: ImportRowError[] = [];
 
-  rows.forEach((value, index) => {
+  for (let index = 0; index < rows.length; index++) {
+    const value = rows[index];
     const rowNumber = index + 1;
     if (!isRecord(value)) {
       errors.push({ row: rowNumber, fields: [], message: 'Row must be an object' });
-      return;
+      continue;
     }
 
     const missing = required.filter((field) => !hasValue(value, field));
@@ -111,7 +124,36 @@ export function validateImportPreview(entity: string, rows: unknown): ImportPrev
       errors.push({ row: rowNumber, fields: [], message: 'Duplicate record in this import' });
     }
     if (key) seen.add(key);
-  });
+
+    // Database conflict check
+    if (typedEntity === 'institutions') {
+      const code = String(value.code ?? '').trim();
+      if (code) {
+        const existing = await dbInstance.select({ id: institutions.id }).from(institutions).where(eq(institutions.code, code)).get();
+        if (existing) {
+          errors.push({ row: rowNumber, fields: ['code'], message: `Institution with code "${code}" already exists in the database` });
+        }
+      }
+    } else if (typedEntity === 'students') {
+      const studentId = String(value.studentId ?? '').trim();
+      if (studentId) {
+        const existingStudent = await dbInstance.select({ id: students.id }).from(students).where(eq(students.studentId, studentId)).get();
+        const existingUser = await dbInstance.select({ id: users.id }).from(users).where(eq(users.institutionId, studentId)).get();
+        if (existingStudent || existingUser) {
+          errors.push({ row: rowNumber, fields: ['studentId'], message: `Student ID "${studentId}" already exists in the database` });
+        }
+      }
+    } else if (typedEntity === 'teachers') {
+      const employeeId = String(value.employeeId ?? '').trim();
+      if (employeeId) {
+        const existingTeacher = await dbInstance.select({ id: teachers.id }).from(teachers).where(eq(teachers.employeeId, employeeId)).get();
+        const existingUser = await dbInstance.select({ id: users.id }).from(users).where(eq(users.institutionId, employeeId)).get();
+        if (existingTeacher || existingUser) {
+          errors.push({ row: rowNumber, fields: ['employeeId'], message: `Employee ID "${employeeId}" already exists in the database` });
+        }
+      }
+    }
+  }
 
   const invalidRows = new Set(errors.map((error) => error.row)).size;
   return {

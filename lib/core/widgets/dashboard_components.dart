@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../features/auth/domain/user_role.dart';
+import '../../features/auth/presentation/auth_providers.dart';
 import '../theme/app_theme.dart';
 
-class DashboardShell extends StatelessWidget {
+class DashboardShell extends ConsumerWidget {
   const DashboardShell({
     required this.title,
     required this.subtitle,
     required this.child,
     this.actions = const [],
+    this.showLogout = true,
     super.key,
   });
 
@@ -15,9 +20,10 @@ class DashboardShell extends StatelessWidget {
   final String subtitle;
   final Widget child;
   final List<Widget> actions;
+  final bool showLogout;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppColors.paper,
       body: SafeArea(
@@ -34,7 +40,12 @@ class DashboardShell extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _DashboardHeader(title: title, subtitle: subtitle, actions: actions),
+                    _DashboardHeader(
+                      title: title,
+                      subtitle: subtitle,
+                      actions: actions,
+                      showLogout: showLogout,
+                    ),
                     const SizedBox(height: AppSpacing.xl),
                     child,
                   ],
@@ -56,7 +67,25 @@ class DashboardShell extends StatelessWidget {
       bottomNavigationBar: MediaQuery.sizeOf(context).width < 760
           ? NavigationBar(
               selectedIndex: 0,
-              destinations: [
+              onDestinationSelected: (index) {
+                if (index == 0) {
+                  // Currently on home dashboard
+                } else if (index == 1) {
+                  final user = ref.read(currentUserProvider);
+                  if (user?.role == UserRole.student) {
+                    context.push('/student/timetable');
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Schedule coming soon')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('More options coming soon')),
+                  );
+                }
+              },
+              destinations: const [
                 NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
                 NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Schedule'),
                 NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
@@ -67,39 +96,109 @@ class DashboardShell extends StatelessWidget {
   }
 }
 
-class _NavigationRail extends StatelessWidget {
+class _NavigationRail extends ConsumerWidget {
   const _NavigationRail();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       width: 92,
       color: AppColors.navy900,
-      child: const Column(
+      child: Column(
         children: [
-          SizedBox(height: 28),
-          _BrandMark(),
-          SizedBox(height: 44),
-          Icon(Icons.home, color: AppColors.gold300),
-          SizedBox(height: 28),
-          Icon(Icons.calendar_month_outlined, color: Colors.white70),
-          SizedBox(height: 28),
-          Icon(Icons.notifications_none, color: Colors.white70),
-          Spacer(),
-          Icon(Icons.settings_outlined, color: Colors.white70),
-          SizedBox(height: 28),
+          const SizedBox(height: 28),
+          const _BrandMark(),
+          const SizedBox(height: 36),
+          IconButton(
+            icon: const Icon(Icons.home, color: AppColors.gold300),
+            tooltip: 'Home',
+            onPressed: () {
+              final user = ref.read(currentUserProvider);
+              if (user != null) {
+                final target = switch (user.role) {
+                  UserRole.student => '/student/dashboard',
+                  UserRole.teacher => '/teacher/dashboard',
+                  UserRole.admin => '/admin/dashboard',
+                };
+                context.go(target);
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_outlined, color: Colors.white70),
+            tooltip: 'Schedule',
+            onPressed: () {
+              final user = ref.read(currentUserProvider);
+              if (user?.role == UserRole.student) {
+                context.push('/student/timetable');
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Schedule coming soon')),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          IconButton(
+            icon: const Icon(Icons.notifications_none, color: Colors.white70),
+            tooltip: 'Notifications',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Notifications coming soon')),
+              );
+            },
+          ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+            tooltip: 'Settings',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Settings coming soon')),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white70),
+            tooltip: 'Logout',
+            onPressed: () => ref.read(authRepositoryProvider).logout(),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 }
 
+class LogoutButton extends ConsumerWidget {
+  const LogoutButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return IconButton(
+      icon: const Icon(Icons.logout, color: AppColors.navy900),
+      tooltip: 'Logout',
+      onPressed: () async {
+        await ref.read(authRepositoryProvider).logout();
+      },
+    );
+  }
+}
+
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.title, required this.subtitle, required this.actions});
+  const _DashboardHeader({
+    required this.title,
+    required this.subtitle,
+    required this.actions,
+    required this.showLogout,
+  });
 
   final String title;
   final String subtitle;
   final List<Widget> actions;
+  final bool showLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +218,10 @@ class _DashboardHeader extends StatelessWidget {
           ),
         ),
         ...actions,
+        if (showLogout) ...[
+          const SizedBox(width: AppSpacing.xs),
+          const LogoutButton(),
+        ],
       ],
     );
   }
@@ -140,6 +243,74 @@ class _BrandMark extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: const Text('S', style: TextStyle(color: AppColors.gold300, fontSize: 24, fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+class DemoDataBadge extends StatelessWidget {
+  const DemoDataBadge({this.label = 'Demo data', super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFFD97706), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF92400E),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+class DemoDataBanner extends StatelessWidget {
+  const DemoDataBanner({
+    this.message = 'DEMO DATA: The figures and records displayed below are simulated for preview purposes and do not represent real student or institutional data.',
+    super.key,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: const Color(0xFFD97706), width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Color(0xFF92400E), size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF92400E),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,20 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/dashboard_components.dart';
+import '../../../auth/presentation/auth_providers.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final displayName = user?.name.isNotEmpty == true ? user!.name : 'Administrator';
+    final roleSubtitle = user != null ? 'Administration • ${user.institutionId}' : 'Seshadripuram College • Administration';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A';
+
     return DashboardShell(
-      title: 'Institution overview',
-      subtitle: 'Seshadripuram College • Administration',
+      title: 'Welcome, $displayName',
+      subtitle: roleSubtitle,
       actions: [
-        IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none), tooltip: 'Notifications'),
-        const CircleAvatar(backgroundColor: AppColors.gold500, child: Text('A', style: TextStyle(color: AppColors.navy950, fontWeight: FontWeight.w800))),
+        IconButton(
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notifications coming soon')),
+            );
+          },
+          icon: const Icon(Icons.notifications_none),
+          tooltip: 'Notifications',
+        ),
+        CircleAvatar(
+          backgroundColor: AppColors.gold500,
+          child: Text(initial, style: const TextStyle(color: AppColors.navy950, fontWeight: FontWeight.w800)),
+        ),
       ],
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Card(
@@ -34,9 +52,9 @@ class AdminDashboardScreen extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         const Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-          SizedBox(width: 180, child: StatCard(label: 'Active students', value: '1,248', icon: Icons.school_outlined, accent: AppColors.navy800)),
-          SizedBox(width: 180, child: StatCard(label: 'Faculty members', value: '86', icon: Icons.people_outline, accent: AppColors.gold500)),
-          SizedBox(width: 180, child: StatCard(label: 'Pending imports', value: '2', icon: Icons.file_upload_outlined, accent: AppColors.warning)),
+          SizedBox(width: 180, child: StatCard(label: 'Active students (Demo data)', value: '1,248', icon: Icons.school_outlined, accent: AppColors.navy800)),
+          SizedBox(width: 180, child: StatCard(label: 'Faculty members (Demo data)', value: '86', icon: Icons.people_outline, accent: AppColors.gold500)),
+          SizedBox(width: 180, child: StatCard(label: 'Pending imports (Demo data)', value: '2', icon: Icons.file_upload_outlined, accent: AppColors.warning)),
         ]),
         const SizedBox(height: AppSpacing.xl),
         Text('Administration tools', style: Theme.of(context).textTheme.titleLarge),
@@ -49,7 +67,7 @@ class AdminDashboardScreen extends StatelessWidget {
         ]),
         const SizedBox(height: AppSpacing.xl),
         const DashboardSection(
-          title: 'Recent activity',
+          title: 'Recent activity (Demo data)',
           child: Column(children: [
             AnnouncementTile(title: 'Student data import requires review', date: 'Today • 42 rows need attention'),
             SizedBox(height: AppSpacing.sm),
