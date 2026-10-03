@@ -46,18 +46,21 @@ class AttendanceOverall {
     required this.attendedClasses,
     required this.absentClasses,
     required this.percentage,
+    this.approvedLeavesCount = 0,
   });
 
   final int totalClasses;
   final int attendedClasses;
   final int absentClasses;
   final double percentage;
+  final int approvedLeavesCount;
 
   factory AttendanceOverall.fromJson(Map<String, dynamic> json) => AttendanceOverall(
         totalClasses: (json['totalClasses'] as num?)?.toInt() ?? 0,
         attendedClasses: (json['attendedClasses'] as num?)?.toInt() ?? 0,
         absentClasses: (json['absentClasses'] as num?)?.toInt() ?? 0,
         percentage: (json['percentage'] as num?)?.toDouble() ?? 100.0,
+        approvedLeavesCount: (json['approvedLeavesCount'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -443,6 +446,102 @@ class StudentGradeCardSummary {
       subjects: subs,
     );
   }
+}
+
+class LeaveRequestItem {
+  const LeaveRequestItem({
+    required this.id,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.reason,
+    this.documentUrl,
+    required this.status,
+    this.reviewRemarks,
+    this.reviewedAt,
+    required this.createdAt,
+    this.reviewedByTeacherName,
+  });
+
+  final String id;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final String reason;
+  final String? documentUrl;
+  final String status;
+  final String? reviewRemarks;
+  final String? reviewedAt;
+  final String createdAt;
+  final String? reviewedByTeacherName;
+
+  factory LeaveRequestItem.fromJson(Map<String, dynamic> json) => LeaveRequestItem(
+        id: json['id']?.toString() ?? '',
+        leaveType: json['leaveType']?.toString() ?? 'PERSONAL',
+        startDate: json['startDate']?.toString() ?? '',
+        endDate: json['endDate']?.toString() ?? '',
+        reason: json['reason']?.toString() ?? '',
+        documentUrl: json['documentUrl']?.toString(),
+        status: json['status']?.toString() ?? 'PENDING',
+        reviewRemarks: json['reviewRemarks']?.toString(),
+        reviewedAt: json['reviewedAt']?.toString(),
+        createdAt: json['createdAt']?.toString() ?? '',
+        reviewedByTeacherName: json['reviewedByTeacherName']?.toString(),
+      );
+}
+
+class SectionLeaveRequestItem {
+  const SectionLeaveRequestItem({
+    required this.id,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.reason,
+    this.documentUrl,
+    required this.status,
+    this.reviewRemarks,
+    this.reviewedAt,
+    required this.createdAt,
+    required this.studentId,
+    required this.studentInstitutionId,
+    required this.studentFullName,
+    required this.sectionName,
+    this.reviewedByTeacherName,
+  });
+
+  final String id;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final String reason;
+  final String? documentUrl;
+  final String status;
+  final String? reviewRemarks;
+  final String? reviewedAt;
+  final String createdAt;
+  final String studentId;
+  final String studentInstitutionId;
+  final String studentFullName;
+  final String sectionName;
+  final String? reviewedByTeacherName;
+
+  factory SectionLeaveRequestItem.fromJson(Map<String, dynamic> json) => SectionLeaveRequestItem(
+        id: json['id']?.toString() ?? '',
+        leaveType: json['leaveType']?.toString() ?? 'PERSONAL',
+        startDate: json['startDate']?.toString() ?? '',
+        endDate: json['endDate']?.toString() ?? '',
+        reason: json['reason']?.toString() ?? '',
+        documentUrl: json['documentUrl']?.toString(),
+        status: json['status']?.toString() ?? 'PENDING',
+        reviewRemarks: json['reviewRemarks']?.toString(),
+        reviewedAt: json['reviewedAt']?.toString(),
+        createdAt: json['createdAt']?.toString() ?? '',
+        studentId: json['studentId']?.toString() ?? '',
+        studentInstitutionId: json['studentInstitutionId']?.toString() ?? '',
+        studentFullName: json['studentFullName']?.toString() ?? '',
+        sectionName: json['sectionName']?.toString() ?? '',
+        reviewedByTeacherName: json['reviewedByTeacherName']?.toString(),
+      );
 }
 
 

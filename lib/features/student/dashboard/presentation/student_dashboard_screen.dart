@@ -91,6 +91,16 @@ class StudentDashboardScreen extends ConsumerWidget {
               SizedBox(
                 width: 180,
                 child: StatCard(
+                  label: 'Leave & OD',
+                  value: 'Apply',
+                  icon: Icons.event_note_outlined,
+                  accent: AppColors.navy700,
+                  onTap: () => context.push('/student/leaves'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
                   label: 'Announcements',
                   value: 'Notices',
                   icon: Icons.notifications_active_outlined,
@@ -105,6 +115,7 @@ class StudentDashboardScreen extends ConsumerWidget {
 
           final explore = Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
             OutlinedButton.icon(onPressed: () => context.push('/student/marks'), icon: const Icon(Icons.auto_graph_outlined), label: const Text('Internal Marks & Grades')),
+            OutlinedButton.icon(onPressed: () => context.push('/student/leaves'), icon: const Icon(Icons.event_note_outlined), label: const Text('Leave & OD Requests')),
             OutlinedButton.icon(onPressed: () => context.push('/student/attendance'), icon: const Icon(Icons.event_available), label: const Text('Attendance')),
             OutlinedButton.icon(onPressed: () => context.push('/student/timetable'), icon: const Icon(Icons.calendar_month_outlined), label: const Text('Full timetable')),
             if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/student/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('Assignments')),

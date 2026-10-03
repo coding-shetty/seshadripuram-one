@@ -6,6 +6,7 @@ import {
   departments,
   enrollments,
   institutions,
+  leaveRequests,
   programs,
   sections,
   semesters,
@@ -316,15 +317,37 @@ async function seed() {
     });
   }
 
-  // 12. Announcements
-  if ((await db.select({ id: announcements.id }).from(announcements).limit(1)).length === 0) {
-    await db.insert(announcements).values([
-      { id: uuidv4(), institutionId: instId, sectionId: secId, title: "IA-2 Schedule Announcement", body: "Internal Assessment 2 schedule has been finalized. Check timetable for timings.", category: "ACADEMIC", audienceRole: "ALL", publishedAt: "2026-09-28T09:00:00.000Z", isPublished: true },
-      { id: uuidv4(), institutionId: instId, title: "Seshadripuram Annual Tech Fest", body: "Registrations for coding, hackathon, and web design events are now open.", category: "EVENT", audienceRole: "ALL", publishedAt: "2026-09-25T12:00:00.000Z", isPublished: true },
-      { id: uuidv4(), institutionId: instId, title: "Faculty Meeting Notice", body: "Department review meeting scheduled for Friday at 3:30 PM.", category: "STAFF", audienceRole: "TEACHER", publishedAt: "2026-09-24T10:30:00.000Z", isPublished: true },
+  // 13. Sample Leave & On-Duty (OD) Requests
+  if ((await db.select({ id: leaveRequests.id }).from(leaveRequests).limit(1)).length === 0 && studentRecordId) {
+    await db.insert(leaveRequests).values([
+      {
+        id: uuidv4(),
+        institutionId: instId,
+        studentId: studentRecordId,
+        leaveType: 'ON_DUTY_SPORTS',
+        startDate: '2026-10-08',
+        endDate: '2026-10-10',
+        reason: 'Bangalore University Inter-Collegiate Football Championship at Central College Grounds',
+        documentUrl: 'https://docs.seshadripuram.ac.in/od/sports-selection-letter.pdf',
+        status: 'APPROVED',
+        reviewedByTeacherId: teacherRecordId || null,
+        reviewRemarks: 'OD approved for university representation. Excused attendance granted.',
+        reviewedAt: '2026-10-02T11:30:00.000Z',
+        createdAt: '2026-10-01T09:15:00.000Z',
+      },
+      {
+        id: uuidv4(),
+        institutionId: instId,
+        studentId: studentRecordId,
+        leaveType: 'ON_DUTY_CULTURAL',
+        startDate: '2026-10-22',
+        endDate: '2026-10-23',
+        reason: 'State Level Youth Fest Classical Music Competition representing Seshadripuram College',
+        status: 'PENDING',
+        createdAt: '2026-10-03T14:20:00.000Z',
+      },
     ]);
-  } else {
-    await db.update(announcements).set({ institutionId: instId });
+    console.log('Inserted sample Leave and On-Duty requests');
   }
 
   console.log("Seeding complete!");

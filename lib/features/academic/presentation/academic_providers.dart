@@ -32,4 +32,13 @@ final mySectionsProvider = FutureProvider.autoDispose<List<Map<String, String>>>
   (ref) => ref.watch(academicRepositoryProvider).getMySections(),
 );
 
+final myLeavesProvider = FutureProvider.autoDispose<List<LeaveRequestItem>>(
+  (ref) => ref.watch(academicRepositoryProvider).getMyLeaves(),
+);
+
+final sectionLeavesProvider = FutureProvider.autoDispose.family<List<SectionLeaveRequestItem>, String?>(
+  (ref, status) => ref.watch(academicRepositoryProvider).getSectionLeaves(status: status),
+);
+
+
 

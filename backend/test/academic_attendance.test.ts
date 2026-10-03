@@ -381,6 +381,7 @@ describe('Academic Attendance Lifecycle & Real Calculations', () => {
         attendedClasses: 3,
         absentClasses: 1,
         percentage: 75,
+        approvedLeavesCount: 0,
       });
 
       // Verify subject breakdown has real name and real percentage

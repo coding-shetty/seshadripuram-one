@@ -86,6 +86,16 @@ class TeacherDashboardScreen extends ConsumerWidget {
                   onTap: () => context.push('/teacher/marks'),
                 ),
               ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Leave & OD',
+                  value: 'Approvals',
+                  icon: Icons.approval_outlined,
+                  accent: AppColors.navy700,
+                  onTap: () => context.push('/teacher/leaves'),
+                ),
+              ),
             ],
           ),
           loading: () => const LinearProgressIndicator(),
@@ -156,6 +166,11 @@ class TeacherDashboardScreen extends ConsumerWidget {
             onPressed: () => context.push('/teacher/marks'),
             icon: const Icon(Icons.grading_outlined),
             label: const Text('Internal marks'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => context.push('/teacher/leaves'),
+            icon: const Icon(Icons.approval_outlined),
+            label: const Text('Leave & OD approvals'),
           ),
           if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/teacher/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('New assignment')),
           OutlinedButton.icon(onPressed: () => context.push('/teacher/announcements'), icon: const Icon(Icons.campaign_outlined), label: const Text('Announcement')),

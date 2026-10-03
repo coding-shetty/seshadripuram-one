@@ -8,8 +8,10 @@ import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/academic/presentation/academic_live_screen.dart';
 import '../../features/academic/presentation/student_attendance_screen.dart';
+import '../../features/academic/presentation/student_leave_screen.dart';
 import '../../features/academic/presentation/student_marks_screen.dart';
 import '../../features/academic/presentation/teacher_attendance_screen.dart';
+import '../../features/academic/presentation/teacher_leave_approval_screen.dart';
 import '../../features/academic/presentation/teacher_marks_screen.dart';
 import '../../features/admin/audit/presentation/admin_audit_logs_screen.dart';
 import '../../features/admin/dashboard/presentation/admin_dashboard_screen.dart';
@@ -100,10 +102,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/student/timetable', builder: (context, state) => const AcademicLiveScreen(showTimetable: true)),
       GoRoute(path: '/student/attendance', builder: (context, state) => const StudentAttendanceScreen()),
       GoRoute(path: '/student/marks', builder: (context, state) => const StudentMarksScreen()),
+      GoRoute(path: '/student/leaves', builder: (context, state) => const StudentLeaveScreen()),
       if (AppConfig.enableDemoFeatures) GoRoute(path: '/student/assignments', builder: (context, state) => const DemoFeatureScreen(feature: DemoFeature.assignments)),
       GoRoute(path: '/teacher/timetable', builder: (context, state) => const AcademicLiveScreen(showTimetable: true)),
       GoRoute(path: '/teacher/attendance', builder: (context, state) => const TeacherAttendanceScreen()),
       GoRoute(path: '/teacher/marks', builder: (context, state) => const TeacherMarksScreen()),
+      GoRoute(path: '/teacher/leaves', builder: (context, state) => const TeacherLeaveApprovalScreen()),
       if (AppConfig.enableDemoFeatures) GoRoute(path: '/teacher/assignments', builder: (context, state) => const DemoFeatureScreen(feature: DemoFeature.assignments)),
       GoRoute(path: '/teacher/announcements', builder: (context, state) => const AcademicLiveScreen(showTimetable: false)),
       if (AppConfig.enableDemoFeatures) GoRoute(path: '/admin/structure', builder: (context, state) => const DemoFeatureScreen(feature: DemoFeature.structure)),

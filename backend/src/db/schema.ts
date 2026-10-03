@@ -325,6 +325,28 @@ export const studentMarks = sqliteTable('student_marks', {
   index('student_marks_assessment_idx').on(table.assessmentId),
 ]);
 
+export const leaveRequests = sqliteTable('leave_requests', {
+  id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  studentId: text('student_id').notNull().references(() => students.id),
+  leaveType: text('leave_type').notNull(), // 'MEDICAL' | 'ON_DUTY_SPORTS' | 'ON_DUTY_CULTURAL' | 'ON_DUTY_ACADEMIC' | 'PERSONAL'
+  startDate: text('start_date').notNull(), // 'YYYY-MM-DD'
+  endDate: text('end_date').notNull(), // 'YYYY-MM-DD'
+  reason: text('reason').notNull(),
+  documentUrl: text('document_url'),
+  status: text('status').notNull().default('PENDING'), // 'PENDING' | 'APPROVED' | 'REJECTED'
+  reviewedByTeacherId: text('reviewed_by_teacher_id').references(() => teachers.id),
+  reviewRemarks: text('review_remarks'),
+  reviewedAt: text('reviewed_at'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index('leave_requests_student_idx').on(table.studentId),
+  index('leave_requests_status_idx').on(table.status),
+  index('leave_requests_institution_idx').on(table.institutionId),
+  index('leave_requests_dates_idx').on(table.startDate, table.endDate),
+]);
+
 // Shared durable auth throttling: no paid Redis service is required.
 export const rateLimitBuckets = sqliteTable('rate_limit_buckets', {
   key: text('key').primaryKey(),

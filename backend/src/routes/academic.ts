@@ -11,6 +11,7 @@ import {
   departments,
   enrollments,
   institutions,
+  leaveRequests,
   programs,
   sections,
   studentMarks,
@@ -635,12 +636,18 @@ academicRouter.get('/attendance', requireAuthentication, async (req, res) => {
       subjectName: subjectMap.get(r.subjectId ?? '')?.name ?? 'Class Session',
     }));
 
+    const studentLeaves = await db
+      .select({ id: leaveRequests.id })
+      .from(leaveRequests)
+      .where(and(eq(leaveRequests.studentId, ctx.studentId!), eq(leaveRequests.status, 'APPROVED')));
+
     return res.json({
       overall: {
         totalClasses,
         attendedClasses,
         absentClasses,
         percentage,
+        approvedLeavesCount: studentLeaves.length,
       },
       bySubject,
       recentRecords,
@@ -1214,4 +1221,219 @@ academicRouter.get('/my-grades', requireAuthentication, requireRole('STUDENT'), 
     subjects: subjectResults,
   });
 });
+
+// ==========================================
+// STUDENT LEAVE & ON-DUTY (OD) WORKFLOW
+// ==========================================
+
+const submitLeaveSchema = z.object({
+  leaveType: z.enum(['MEDICAL', 'ON_DUTY_SPORTS', 'ON_DUTY_CULTURAL', 'ON_DUTY_ACADEMIC', 'PERSONAL']),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be YYYY-MM-DD'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be YYYY-MM-DD'),
+  reason: z.string().trim().min(5, 'Reason must be at least 5 characters').max(500),
+  documentUrl: z.string().trim().optional(),
+});
+
+const reviewLeaveSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED']),
+  reviewRemarks: z.string().trim().max(500).optional(),
+});
+
+// Student applies for Leave or On-Duty (OD)
+academicRouter.post('/leave-requests', requireAuthentication, requireRole('STUDENT'), async (req, res) => {
+  const parseResult = submitLeaveSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Invalid leave request data' });
+  }
+
+  const { leaveType, startDate, endDate, reason, documentUrl } = parseResult.data;
+  if (startDate > endDate) {
+    return res.status(400).json({ error: 'Start date cannot be after end date' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (!ctx.studentId) {
+    return res.status(404).json({ error: 'Student profile not found for this account' });
+  }
+
+  const leaveId = randomUUID();
+  const now = new Date().toISOString();
+
+  await db.insert(leaveRequests).values({
+    id: leaveId,
+    institutionId: ctx.institutionId,
+    studentId: ctx.studentId,
+    leaveType,
+    startDate,
+    endDate,
+    reason,
+    documentUrl: documentUrl || null,
+    status: 'PENDING',
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  if (ctx.institutionId) {
+    await db.insert(auditLogs).values({
+      id: randomUUID(),
+      collegeId: ctx.institutionId,
+      action: 'LEAVE_REQUESTED',
+      details: `Student applied for ${leaveType} from ${startDate} to ${endDate}`,
+      actorUserId: req.auth!.sub,
+    });
+  }
+
+  const created = await db.select().from(leaveRequests).where(eq(leaveRequests.id, leaveId)).get();
+  return res.status(201).json({ leaveRequest: created });
+});
+
+// Student views their own leave & OD history
+academicRouter.get('/my-leave-requests', requireAuthentication, requireRole('STUDENT'), async (req, res) => {
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (!ctx.studentId) {
+    return res.status(404).json({ error: 'Student profile not found for this account' });
+  }
+
+  const records = await db
+    .select({
+      id: leaveRequests.id,
+      leaveType: leaveRequests.leaveType,
+      startDate: leaveRequests.startDate,
+      endDate: leaveRequests.endDate,
+      reason: leaveRequests.reason,
+      documentUrl: leaveRequests.documentUrl,
+      status: leaveRequests.status,
+      reviewRemarks: leaveRequests.reviewRemarks,
+      reviewedAt: leaveRequests.reviewedAt,
+      createdAt: leaveRequests.createdAt,
+      reviewedByTeacherName: teachers.fullName,
+    })
+    .from(leaveRequests)
+    .leftJoin(teachers, eq(leaveRequests.reviewedByTeacherId, teachers.id))
+    .where(eq(leaveRequests.studentId, ctx.studentId))
+    .orderBy(desc(leaveRequests.createdAt));
+
+  return res.json({ leaveRequests: records });
+});
+
+// Faculty & Admin view leave & OD requests for their assigned sections
+academicRouter.get('/section-leave-requests', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (!ctx.institutionId) {
+    return res.json({ leaveRequests: [] });
+  }
+
+  const statusFilter = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : 'ALL';
+  const permittedSectionIds = req.auth!.role === 'TEACHER' && ctx.sectionIds.length > 0
+    ? ctx.sectionIds
+    : (await sectionsForCollege(ctx.institutionId)).map((s) => s.id);
+
+  if (permittedSectionIds.length === 0) {
+    return res.json({ leaveRequests: [] });
+  }
+
+  // Get enrolled students in permitted sections
+  const enrolled = await db
+    .select({
+      studentId: enrollments.studentId,
+      sectionId: enrollments.sectionId,
+      sectionName: sections.name,
+    })
+    .from(enrollments)
+    .innerJoin(sections, eq(enrollments.sectionId, sections.id))
+    .where(and(inArray(enrollments.sectionId, permittedSectionIds), eq(enrollments.status, 'ACTIVE')));
+
+  if (enrolled.length === 0) {
+    return res.json({ leaveRequests: [] });
+  }
+
+  const studentSectionMap = new Map<string, string>();
+  const studentIds: string[] = [];
+  for (const e of enrolled) {
+    studentSectionMap.set(e.studentId, e.sectionName);
+    studentIds.push(e.studentId);
+  }
+
+  const conditions = [inArray(leaveRequests.studentId, studentIds)];
+  if (statusFilter !== 'ALL' && ['PENDING', 'APPROVED', 'REJECTED'].includes(statusFilter)) {
+    conditions.push(eq(leaveRequests.status, statusFilter));
+  }
+
+  const rows = await db
+    .select({
+      id: leaveRequests.id,
+      leaveType: leaveRequests.leaveType,
+      startDate: leaveRequests.startDate,
+      endDate: leaveRequests.endDate,
+      reason: leaveRequests.reason,
+      documentUrl: leaveRequests.documentUrl,
+      status: leaveRequests.status,
+      reviewRemarks: leaveRequests.reviewRemarks,
+      reviewedAt: leaveRequests.reviewedAt,
+      createdAt: leaveRequests.createdAt,
+      studentId: students.id,
+      studentInstitutionId: students.studentId,
+      studentFullName: students.fullName,
+      reviewedByTeacherName: teachers.fullName,
+    })
+    .from(leaveRequests)
+    .innerJoin(students, eq(leaveRequests.studentId, students.id))
+    .leftJoin(teachers, eq(leaveRequests.reviewedByTeacherId, teachers.id))
+    .where(and(...conditions))
+    .orderBy(desc(leaveRequests.createdAt));
+
+  const enriched = rows.map((r) => ({
+    ...r,
+    sectionName: studentSectionMap.get(r.studentId) ?? 'Class Section',
+  }));
+
+  return res.json({ leaveRequests: enriched });
+});
+
+// Faculty & Admin review (approve or reject) a student leave or OD request
+academicRouter.patch('/leave-requests/:id/review', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const leaveId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  if (!leaveId) {
+    return res.status(400).json({ error: 'Leave request ID is required' });
+  }
+
+  const parseResult = reviewLeaveSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Invalid review data' });
+  }
+
+  const { status, reviewRemarks } = parseResult.data;
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+
+  const existing = await db.select().from(leaveRequests).where(eq(leaveRequests.id, leaveId)).get();
+  if (!existing) {
+    return res.status(404).json({ error: 'Leave request not found' });
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .update(leaveRequests)
+    .set({
+      status,
+      reviewRemarks: reviewRemarks || null,
+      reviewedByTeacherId: ctx.teacherId ?? null,
+      reviewedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(leaveRequests.id, leaveId));
+
+  if (ctx.institutionId) {
+    await db.insert(auditLogs).values({
+      id: randomUUID(),
+      collegeId: ctx.institutionId,
+      action: 'LEAVE_REVIEWED',
+      details: `${req.auth!.role} marked leave request ${leaveId} as ${status}`,
+      actorUserId: req.auth!.sub,
+    });
+  }
+
+  const updated = await db.select().from(leaveRequests).where(eq(leaveRequests.id, leaveId)).get();
+  return res.json({ leaveRequest: updated });
+});
+
 

@@ -106,5 +106,52 @@ class AcademicRepository {
       'name': s['name']?.toString() ?? '',
     }).toList();
   }
+
+  Future<void> applyLeave({
+    required String leaveType,
+    required String startDate,
+    required String endDate,
+    required String reason,
+    String? documentUrl,
+  }) async {
+    await _dio.post<dynamic>(
+      '/api/academic/leave-requests',
+      data: {
+        'leaveType': leaveType,
+        'startDate': startDate,
+        'endDate': endDate,
+        'reason': reason,
+        if (documentUrl != null && documentUrl.isNotEmpty) 'documentUrl': documentUrl,
+      },
+    );
+  }
+
+  Future<List<LeaveRequestItem>> getMyLeaves() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/academic/my-leave-requests');
+    final items = response.data?['leaveRequests'] as List<dynamic>? ?? const [];
+    return items.whereType<Map<String, dynamic>>().map(LeaveRequestItem.fromJson).toList();
+  }
+
+  Future<List<SectionLeaveRequestItem>> getSectionLeaves({String? status}) async {
+    final query = (status != null && status.isNotEmpty) ? '?status=$status' : '';
+    final response = await _dio.get<Map<String, dynamic>>('/api/academic/section-leave-requests$query');
+    final items = response.data?['leaveRequests'] as List<dynamic>? ?? const [];
+    return items.whereType<Map<String, dynamic>>().map(SectionLeaveRequestItem.fromJson).toList();
+  }
+
+  Future<void> reviewLeave({
+    required String leaveId,
+    required String status,
+    String? reviewRemarks,
+  }) async {
+    await _dio.patch<dynamic>(
+      '/api/academic/leave-requests/$leaveId/review',
+      data: {
+        'status': status,
+        if (reviewRemarks != null && reviewRemarks.isNotEmpty) 'reviewRemarks': reviewRemarks,
+      },
+    );
+  }
 }
+
 
