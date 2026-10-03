@@ -66,6 +66,10 @@ export class ConsoleOtpService implements OtpService {
   async sendOtp(destination: string, otp: string): Promise<void> {
     // Available only with explicit local-development configuration.
     console.info(`[development OTP] destination=${destination} otp=${otp}`);
+    try {
+      const fs = await import('node:fs');
+      fs.writeFileSync('./.latest_dev_otp.txt', `destination=${destination}\notp=${otp}\ntimestamp=${new Date().toISOString()}\n`);
+    } catch (_) {}
   }
 }
 

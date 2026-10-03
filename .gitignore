@@ -58,6 +58,7 @@ backend/coverage/
 *.db
 *.db.bak
 *.db.old
+*.latest_dev_otp.txt
 
 # Signing keys, sensitive backups and deployment secrets
 *.jks
