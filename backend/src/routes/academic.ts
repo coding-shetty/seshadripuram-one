@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import {
   announcements,
+  assessments,
   attendanceRecords,
   auditLogs,
   departments,
@@ -12,6 +13,7 @@ import {
   institutions,
   programs,
   sections,
+  studentMarks,
   students,
   subjectOfferings,
   subjects,
@@ -353,6 +355,29 @@ academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
   return res.json({ timetable: rows });
 });
 
+academicRouter.get('/my-sections', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (!ctx.institutionId) {
+    return res.json({ sections: [] });
+  }
+
+  if (req.auth!.role === 'TEACHER') {
+    if (ctx.sectionIds.length === 0) {
+      return res.json({ sections: [] });
+    }
+    const teacherSections = await db
+      .select({ id: sections.id, name: sections.name })
+      .from(sections)
+      .where(and(inArray(sections.id, ctx.sectionIds), eq(sections.isActive, true)))
+      .orderBy(asc(sections.name));
+    return res.json({ sections: teacherSections });
+  }
+
+  // Admin gets all active sections for the college
+  const adminSections = await sectionsForCollege(ctx.institutionId);
+  return res.json({ sections: adminSections.map((s) => ({ id: s.id, name: s.name })) });
+});
+
 academicRouter.get('/sections/:sectionId/students', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
   const sectionId = typeof req.params.sectionId === 'string' ? req.params.sectionId.trim() : '';
   if (!sectionId) {
@@ -667,3 +692,526 @@ academicRouter.get('/attendance', requireAuthentication, async (req, res) => {
 
   return res.json({ attendance: rows });
 });
+
+// ==========================================
+// INTERNAL MARKS & GRADE CARD SYSTEM
+// ==========================================
+
+academicRouter.get('/sections/:sectionId/assessments', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const sectionId = typeof req.params.sectionId === 'string' ? req.params.sectionId.trim() : '';
+  if (!sectionId) {
+    return res.status(400).json({ error: 'Section ID is required' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to view assessments for this section' });
+    }
+  }
+
+  if (!(await canAccessSection(ctx, req.auth!.role, sectionId))) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
+  }
+
+  const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+  if (!section) {
+    return res.status(404).json({ error: 'Section not found' });
+  }
+
+  // Get active subjects offered in this section
+  const offerings = await db
+    .select({
+      id: subjects.id,
+      name: subjects.name,
+      code: subjects.code,
+      credits: subjects.credits,
+    })
+    .from(subjectOfferings)
+    .innerJoin(subjects, eq(subjectOfferings.subjectId, subjects.id))
+    .where(and(eq(subjectOfferings.sectionId, sectionId), eq(subjectOfferings.isActive, true)))
+    .orderBy(asc(subjects.code));
+
+  // Get total enrolled students
+  const enrolledStudents = await db
+    .select({ id: enrollments.id })
+    .from(enrollments)
+    .where(and(eq(enrollments.sectionId, sectionId), eq(enrollments.status, 'ACTIVE')));
+  const totalStudentsCount = enrolledStudents.length;
+
+  // Get assessments in this section
+  const rows = await db
+    .select({
+      id: assessments.id,
+      title: assessments.title,
+      assessmentType: assessments.assessmentType,
+      maxMarks: assessments.maxMarks,
+      weightage: assessments.weightage,
+      date: assessments.date,
+      subjectId: assessments.subjectId,
+      createdAt: assessments.createdAt,
+    })
+    .from(assessments)
+    .where(eq(assessments.sectionId, sectionId))
+    .orderBy(desc(assessments.date), desc(assessments.createdAt));
+
+  const allMarks = await db.select({ assessmentId: studentMarks.assessmentId }).from(studentMarks);
+  const marksCountMap = new Map<string, number>();
+  for (const m of allMarks) {
+    marksCountMap.set(m.assessmentId, (marksCountMap.get(m.assessmentId) || 0) + 1);
+  }
+
+  const subjectMap = new Map(offerings.map((s) => [s.id, s]));
+
+  const enrichedAssessments = rows.map((a) => {
+    const sub = subjectMap.get(a.subjectId);
+    return {
+      ...a,
+      subjectName: sub?.name ?? 'Subject',
+      subjectCode: sub?.code ?? 'SUB',
+      marksEnteredCount: marksCountMap.get(a.id) || 0,
+      totalStudentsCount,
+    };
+  });
+
+  return res.json({
+    section: { id: section.id, name: section.name },
+    subjects: offerings,
+    assessments: enrichedAssessments,
+  });
+});
+
+const createAssessmentSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(100),
+  assessmentType: z.enum(['IA1', 'IA2', 'IA3', 'ASSIGNMENT', 'LAB', 'SEMESTER_EXAM']),
+  subjectId: z.string().trim().min(1, 'Subject is required'),
+  maxMarks: z.coerce.number().positive('Max marks must be greater than 0').max(1000),
+  weightage: z.coerce.number().int().min(1).max(100).default(100),
+  date: z.iso.date(),
+});
+
+academicRouter.post('/sections/:sectionId/assessments', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const sectionId = typeof req.params.sectionId === 'string' ? req.params.sectionId.trim() : '';
+  if (!sectionId) {
+    return res.status(400).json({ error: 'Section ID is required' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to create assessments for this section' });
+    }
+  }
+
+  if (!(await canAccessSection(ctx, req.auth!.role, sectionId))) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
+  }
+
+  const result = createAssessmentSchema.safeParse(req.body ?? {});
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.issues[0]?.message ?? 'Invalid request body' });
+  }
+
+  const { title, assessmentType, subjectId, maxMarks, weightage, date } = result.data;
+
+  // Validate subject offering
+  const offering = await db
+    .select()
+    .from(subjectOfferings)
+    .where(and(eq(subjectOfferings.sectionId, sectionId), eq(subjectOfferings.subjectId, subjectId), eq(subjectOfferings.isActive, true)))
+    .get();
+
+  if (!offering) {
+    return res.status(400).json({ error: 'Subject is not actively offered in this section' });
+  }
+
+  if (req.auth!.role === 'TEACHER' && ctx.teacherId) {
+    const assignment = await db
+      .select()
+      .from(teachingAssignments)
+      .where(and(eq(teachingAssignments.teacherId, ctx.teacherId), eq(teachingAssignments.subjectOfferingId, offering.id), eq(teachingAssignments.isActive, true)))
+      .get();
+    if (!assignment) {
+      return res.status(403).json({ error: 'You are not assigned to teach this subject' });
+    }
+  }
+
+  const id = randomUUID();
+  await db.insert(assessments).values({
+    id,
+    institutionId: ctx.institutionId ?? null,
+    sectionId,
+    subjectId,
+    title,
+    assessmentType,
+    maxMarks,
+    weightage,
+    date,
+    createdById: req.auth!.sub,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  await db.insert(auditLogs).values({
+    id: randomUUID(),
+    action: 'ASSESSMENT_CREATED',
+    collegeId: ctx.institutionId,
+    details: JSON.stringify({
+      assessmentId: id,
+      sectionId,
+      subjectId,
+      title,
+      assessmentType,
+      maxMarks,
+      createdById: req.auth!.sub,
+    }),
+  });
+
+  return res.status(201).json({ status: 'created', assessmentId: id });
+});
+
+academicRouter.get('/assessments/:assessmentId/marks', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const assessmentId = typeof req.params.assessmentId === 'string' ? req.params.assessmentId.trim() : '';
+  if (!assessmentId) {
+    return res.status(400).json({ error: 'Assessment ID is required' });
+  }
+
+  const assessment = await db.select().from(assessments).where(eq(assessments.id, assessmentId)).get();
+  if (!assessment) {
+    return res.status(404).json({ error: 'Assessment not found' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(assessment.sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to view marks for this section' });
+    }
+  }
+
+  if (!(await canAccessSection(ctx, req.auth!.role, assessment.sectionId))) {
+    return res.status(403).json({ error: 'Assessment is outside your permitted scope' });
+  }
+
+  const section = await db.select().from(sections).where(eq(sections.id, assessment.sectionId)).get();
+  const subject = await db.select().from(subjects).where(eq(subjects.id, assessment.subjectId)).get();
+
+  // Enrolled students in section
+  const enrolled = await db
+    .select({
+      id: students.id,
+      studentId: students.studentId,
+      fullName: students.fullName,
+      contactEmail: students.contactEmail,
+    })
+    .from(enrollments)
+    .innerJoin(students, eq(enrollments.studentId, students.id))
+    .where(and(eq(enrollments.sectionId, assessment.sectionId), eq(enrollments.status, 'ACTIVE')))
+    .orderBy(asc(students.studentId));
+
+  // Current marks for this assessment
+  const existingMarks = await db
+    .select()
+    .from(studentMarks)
+    .where(eq(studentMarks.assessmentId, assessmentId));
+
+  const marksMap = new Map(existingMarks.map((m) => [m.studentId, m]));
+
+  const roster = enrolled.map((s) => {
+    const mark = marksMap.get(s.id);
+    return {
+      studentId: s.id,
+      studentInstitutionId: s.studentId,
+      fullName: s.fullName,
+      contactEmail: s.contactEmail,
+      marksObtained: mark?.marksObtained ?? null,
+      status: mark?.status ?? 'PRESENT',
+      remarks: mark?.remarks ?? null,
+    };
+  });
+
+  return res.json({
+    assessment: {
+      id: assessment.id,
+      title: assessment.title,
+      assessmentType: assessment.assessmentType,
+      maxMarks: assessment.maxMarks,
+      weightage: assessment.weightage,
+      date: assessment.date,
+      sectionId: assessment.sectionId,
+      sectionName: section?.name ?? 'Section',
+      subjectId: assessment.subjectId,
+      subjectName: subject?.name ?? 'Subject',
+      subjectCode: subject?.code ?? 'SUB',
+    },
+    students: roster,
+  });
+});
+
+const submitMarksSchema = z.object({
+  records: z.array(
+    z.object({
+      studentId: z.string().trim().min(1, 'studentId is required'),
+      marksObtained: z.number().nullable().optional(),
+      status: z.enum(['PRESENT', 'ABSENT', 'EXEMPTED']),
+      remarks: z.string().trim().max(250).optional(),
+    })
+  ).min(1, 'At least one student record is required').max(500),
+});
+
+academicRouter.post('/assessments/:assessmentId/marks', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
+  const assessmentId = typeof req.params.assessmentId === 'string' ? req.params.assessmentId.trim() : '';
+  if (!assessmentId) {
+    return res.status(400).json({ error: 'Assessment ID is required' });
+  }
+
+  const assessment = await db.select().from(assessments).where(eq(assessments.id, assessmentId)).get();
+  if (!assessment) {
+    return res.status(404).json({ error: 'Assessment not found' });
+  }
+
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, req.auth!.role, req.auth!.institutionId);
+  if (req.auth!.role === 'TEACHER') {
+    if (!ctx.sectionIds.includes(assessment.sectionId)) {
+      return res.status(403).json({ error: 'You are not authorized to record marks for this section' });
+    }
+  }
+
+  if (!(await canAccessSection(ctx, req.auth!.role, assessment.sectionId))) {
+    return res.status(403).json({ error: 'Assessment is outside your permitted scope' });
+  }
+
+  const result = submitMarksSchema.safeParse(req.body ?? {});
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.issues[0]?.message ?? 'Invalid request body' });
+  }
+
+  const { records } = result.data;
+
+  // Check duplicate students
+  if (new Set(records.map((r) => r.studentId)).size !== records.length) {
+    return res.status(400).json({ error: 'Duplicate student records in marks submission' });
+  }
+
+  // Validate all students enrolled in section
+  const enrolled = await db
+    .select({ id: students.id })
+    .from(enrollments)
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .where(and(eq(enrollments.sectionId, assessment.sectionId), eq(enrollments.status, 'ACTIVE'), eq(students.isActive, true)));
+  const enrolledIds = new Set(enrolled.map((s) => s.id));
+
+  for (const r of records) {
+    if (!enrolledIds.has(r.studentId)) {
+      return res.status(400).json({ error: `Student ${r.studentId} is not actively enrolled in this section` });
+    }
+    if (r.status === 'PRESENT') {
+      if (r.marksObtained === undefined || r.marksObtained === null) {
+        return res.status(400).json({ error: 'Marks obtained is required when status is PRESENT' });
+      }
+      if (r.marksObtained < 0 || r.marksObtained > assessment.maxMarks) {
+        return res.status(400).json({ error: `Marks obtained must be between 0 and maximum marks (${assessment.maxMarks})` });
+      }
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const rec of records) {
+      const marksVal = rec.status === 'PRESENT' ? rec.marksObtained : null;
+      const existing = await tx
+        .select({ id: studentMarks.id })
+        .from(studentMarks)
+        .where(and(eq(studentMarks.assessmentId, assessmentId), eq(studentMarks.studentId, rec.studentId)))
+        .get();
+
+      if (existing) {
+        await tx
+          .update(studentMarks)
+          .set({
+            marksObtained: marksVal,
+            status: rec.status,
+            remarks: rec.remarks ?? null,
+            gradedByUserId: req.auth!.sub,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(studentMarks.id, existing.id));
+      } else {
+        await tx.insert(studentMarks).values({
+          id: randomUUID(),
+          assessmentId,
+          studentId: rec.studentId,
+          marksObtained: marksVal,
+          status: rec.status,
+          remarks: rec.remarks ?? null,
+          gradedByUserId: req.auth!.sub,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    await tx.insert(auditLogs).values({
+      id: randomUUID(),
+      action: 'MARKS_RECORDED',
+      collegeId: ctx.institutionId,
+      details: JSON.stringify({
+        assessmentId,
+        sectionId: assessment.sectionId,
+        subjectId: assessment.subjectId,
+        recordCount: records.length,
+        recordedByUserId: req.auth!.sub,
+      }),
+    });
+  });
+
+  return res.status(200).json({
+    status: 'recorded',
+    recordedCount: records.length,
+    assessmentId,
+  });
+});
+
+function calculateGrade(percentage: number): { letter: string; description: string } {
+  if (percentage >= 90) return { letter: 'O', description: 'Outstanding' };
+  if (percentage >= 80) return { letter: 'A+', description: 'Excellent' };
+  if (percentage >= 70) return { letter: 'A', description: 'Very Good' };
+  if (percentage >= 60) return { letter: 'B+', description: 'Good' };
+  if (percentage >= 50) return { letter: 'B', description: 'Above Average' };
+  if (percentage >= 40) return { letter: 'C', description: 'Pass' };
+  return { letter: 'F', description: 'Fail' };
+}
+
+function calculateClassification(percentage: number): string {
+  if (percentage >= 75) return 'First Class with Distinction';
+  if (percentage >= 60) return 'First Class';
+  if (percentage >= 50) return 'Second Class';
+  if (percentage >= 40) return 'Pass Class';
+  return 'Needs Improvement';
+}
+
+academicRouter.get('/my-grades', requireAuthentication, requireRole('STUDENT'), async (req, res) => {
+  const ctx = await resolveCallerAcademicContext(req.auth!.sub, 'STUDENT', req.auth!.institutionId);
+
+  if (!ctx.studentId || !ctx.sectionId) {
+    return res.json({
+      student: null,
+      overall: {
+        totalMarksScored: 0,
+        totalMaxMarks: 0,
+        percentage: 100,
+        classification: 'No active enrollments',
+      },
+      subjects: [],
+    });
+  }
+
+  const student = await db.select().from(students).where(eq(students.id, ctx.studentId)).get();
+  const section = await db.select().from(sections).where(eq(sections.id, ctx.sectionId)).get();
+
+  // All assessments for this section
+  const sectionAssessments = await db
+    .select({
+      id: assessments.id,
+      title: assessments.title,
+      assessmentType: assessments.assessmentType,
+      maxMarks: assessments.maxMarks,
+      weightage: assessments.weightage,
+      date: assessments.date,
+      subjectId: assessments.subjectId,
+    })
+    .from(assessments)
+    .where(eq(assessments.sectionId, ctx.sectionId))
+    .orderBy(asc(assessments.date));
+
+  // All student's marks
+  const marks = await db
+    .select()
+    .from(studentMarks)
+    .where(eq(studentMarks.studentId, ctx.studentId));
+
+  const marksByAssessmentId = new Map(marks.map((m) => [m.assessmentId, m]));
+
+  // Get subjects offered in section
+  const offerings = await db
+    .select({
+      id: subjects.id,
+      name: subjects.name,
+      code: subjects.code,
+      credits: subjects.credits,
+    })
+    .from(subjectOfferings)
+    .innerJoin(subjects, eq(subjectOfferings.subjectId, subjects.id))
+    .where(and(eq(subjectOfferings.sectionId, ctx.sectionId), eq(subjectOfferings.isActive, true)))
+    .orderBy(asc(subjects.code));
+
+  let totalScoredAll = 0;
+  let totalMaxAll = 0;
+
+  const subjectResults = offerings.map((sub) => {
+    const subAssessments = sectionAssessments.filter((a) => a.subjectId === sub.id);
+    let subScored = 0;
+    let subMax = 0;
+
+    const evaluationItems = subAssessments.map((a) => {
+      const mark = marksByAssessmentId.get(a.id);
+      const isGraded = mark !== undefined;
+      const status = mark?.status ?? 'PENDING';
+      const marksObtained = mark?.marksObtained ?? null;
+
+      if (isGraded && status === 'PRESENT' && marksObtained !== null) {
+        subScored += marksObtained;
+        subMax += a.maxMarks;
+        totalScoredAll += marksObtained;
+        totalMaxAll += a.maxMarks;
+      } else if (isGraded && (status === 'ABSENT' || status === 'EXEMPTED')) {
+        subMax += a.maxMarks;
+        totalMaxAll += a.maxMarks;
+      }
+
+      return {
+        assessmentId: a.id,
+        title: a.title,
+        assessmentType: a.assessmentType,
+        maxMarks: a.maxMarks,
+        marksObtained,
+        status,
+        percentage: marksObtained !== null && a.maxMarks > 0 ? Number(((marksObtained / a.maxMarks) * 100).toFixed(1)) : null,
+      };
+    });
+
+    const subPercentage = subMax > 0 ? Number(((subScored / subMax) * 100).toFixed(1)) : 100.0;
+    const grade = calculateGrade(subPercentage);
+
+    return {
+      subjectId: sub.id,
+      subjectName: sub.name,
+      subjectCode: sub.code,
+      credits: sub.credits ?? 3,
+      totalScored: Number(subScored.toFixed(1)),
+      totalMax: subMax,
+      percentage: subPercentage,
+      gradeLetter: grade.letter,
+      gradeDescription: grade.description,
+      assessments: evaluationItems,
+    };
+  });
+
+  const overallPercentage = totalMaxAll > 0 ? Number(((totalScoredAll / totalMaxAll) * 100).toFixed(1)) : 100.0;
+  const classification = calculateClassification(overallPercentage);
+
+  return res.json({
+    student: {
+      id: student?.id,
+      studentId: student?.studentId,
+      fullName: student?.fullName,
+      sectionName: section?.name,
+    },
+    overall: {
+      totalMarksScored: Number(totalScoredAll.toFixed(1)),
+      totalMaxMarks: totalMaxAll,
+      percentage: overallPercentage,
+      classification,
+    },
+    subjects: subjectResults,
+  });
+});
+

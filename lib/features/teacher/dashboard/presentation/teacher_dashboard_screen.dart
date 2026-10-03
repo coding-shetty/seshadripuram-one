@@ -76,6 +76,16 @@ class TeacherDashboardScreen extends ConsumerWidget {
                   onTap: () => context.push('/teacher/attendance'),
                 ),
               ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Internal marks',
+                  value: 'Gradebook',
+                  icon: Icons.grading_outlined,
+                  accent: AppColors.navy800,
+                  onTap: () => context.push('/teacher/marks'),
+                ),
+              ),
             ],
           ),
           loading: () => const LinearProgressIndicator(),
@@ -141,6 +151,11 @@ class TeacherDashboardScreen extends ConsumerWidget {
             onPressed: () => context.push('/teacher/attendance'),
             icon: const Icon(Icons.fact_check_outlined),
             label: const Text('Take attendance', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => context.push('/teacher/marks'),
+            icon: const Icon(Icons.grading_outlined),
+            label: const Text('Internal marks'),
           ),
           if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/teacher/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('New assignment')),
           OutlinedButton.icon(onPressed: () => context.push('/teacher/announcements'), icon: const Icon(Icons.campaign_outlined), label: const Text('Announcement')),

@@ -28,6 +28,15 @@ class StudentDashboardScreen extends ConsumerWidget {
       error: (_, _) => '--',
     );
 
+    final gradesAsync = ref.watch(studentGradesProvider);
+    final gradesValue = gradesAsync.when(
+      data: (grades) => grades.totalMaxMarks > 0
+          ? '${grades.percentage.toStringAsFixed(1)}%'
+          : 'Active',
+      loading: () => '...',
+      error: (_, _) => '--',
+    );
+
     return DashboardShell(
       title: 'Good morning, $displayName',
       subtitle: roleSubtitle,
@@ -62,6 +71,16 @@ class StudentDashboardScreen extends ConsumerWidget {
               SizedBox(
                 width: 180,
                 child: StatCard(
+                  label: 'Grade Card',
+                  value: gradesValue,
+                  icon: Icons.auto_graph_outlined,
+                  accent: AppColors.gold500,
+                  onTap: () => context.push('/student/marks'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
                   label: 'Full Timetable',
                   value: 'Live',
                   icon: Icons.schedule,
@@ -85,9 +104,9 @@ class StudentDashboardScreen extends ConsumerWidget {
           const announcements = LiveAnnouncementsSection(limit: 2);
 
           final explore = Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
-            OutlinedButton.icon(onPressed: () => context.push('/student/timetable'), icon: const Icon(Icons.calendar_month_outlined), label: const Text('Full timetable')),
+            OutlinedButton.icon(onPressed: () => context.push('/student/marks'), icon: const Icon(Icons.auto_graph_outlined), label: const Text('Internal Marks & Grades')),
             OutlinedButton.icon(onPressed: () => context.push('/student/attendance'), icon: const Icon(Icons.event_available), label: const Text('Attendance')),
-            if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/student/marks'), icon: const Icon(Icons.auto_graph_outlined), label: const Text('Marks')),
+            OutlinedButton.icon(onPressed: () => context.push('/student/timetable'), icon: const Icon(Icons.calendar_month_outlined), label: const Text('Full timetable')),
             if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/student/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('Assignments')),
             OutlinedButton.icon(onPressed: () => context.push('/student/announcements'), icon: const Icon(Icons.campaign_outlined), label: const Text('All notices')),
           ]);

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const users = sqliteTable("users", {
@@ -287,6 +287,42 @@ export const attendanceRecords = sqliteTable('attendance_records', {
   index('attendance_student_idx').on(table.studentId, table.date),
   index('attendance_section_idx').on(table.sectionId, table.date),
   index('attendance_subject_idx').on(table.subjectId),
+]);
+
+export const assessments = sqliteTable('assessments', {
+  id: text('id').primaryKey(),
+  institutionId: text('institution_id').references(() => institutions.id),
+  sectionId: text('section_id').notNull().references(() => sections.id),
+  subjectId: text('subject_id').notNull().references(() => subjects.id),
+  title: text('title').notNull(),
+  assessmentType: text('assessment_type').notNull(), // 'IA1' | 'IA2' | 'IA3' | 'ASSIGNMENT' | 'LAB' | 'SEMESTER_EXAM'
+  maxMarks: real('max_marks').notNull(),
+  weightage: integer('weightage').notNull().default(100),
+  date: text('date').notNull(),
+  createdById: text('created_by_id').references(() => users.id),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex('assessments_section_subject_title_unique').on(table.sectionId, table.subjectId, table.title),
+  index('assessments_section_idx').on(table.sectionId),
+  index('assessments_subject_idx').on(table.subjectId),
+  index('assessments_institution_idx').on(table.institutionId),
+]);
+
+export const studentMarks = sqliteTable('student_marks', {
+  id: text('id').primaryKey(),
+  assessmentId: text('assessment_id').notNull().references(() => assessments.id),
+  studentId: text('student_id').notNull().references(() => students.id),
+  marksObtained: real('marks_obtained'),
+  status: text('status').notNull().default('PRESENT'), // 'PRESENT' | 'ABSENT' | 'EXEMPTED'
+  remarks: text('remarks'),
+  gradedByUserId: text('graded_by_user_id').references(() => users.id),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex('student_marks_assessment_student_unique').on(table.assessmentId, table.studentId),
+  index('student_marks_student_idx').on(table.studentId),
+  index('student_marks_assessment_idx').on(table.assessmentId),
 ]);
 
 // Shared durable auth throttling: no paid Redis service is required.

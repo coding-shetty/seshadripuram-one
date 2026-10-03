@@ -41,6 +41,16 @@ void main() {
                 bySubject: [],
                 recentRecords: [],
               )),
+          studentGradesProvider.overrideWith((ref) async => const StudentGradeCardSummary(
+                studentName: 'Ananya Sharma',
+                studentId: 'SESH-STU-042',
+                sectionName: 'BCA 4A',
+                totalMarksScored: 45,
+                totalMaxMarks: 50,
+                percentage: 90.0,
+                classification: 'First Class with Distinction',
+                subjects: [],
+              )),
         ],
         child: const MaterialApp(
           home: StudentDashboardScreen(),
