@@ -15,6 +15,6 @@ class AppConfig {
   static String get baseUrl {
     if (debugBaseUrl != null && debugBaseUrl!.isNotEmpty) return debugBaseUrl!;
     if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
-    return 'http://localhost:3000';
+    return 'http://localhost:8080';
   }
 }
