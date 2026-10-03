@@ -58,6 +58,8 @@ describe('Security audit logging', () => {
       },
     ]);
 
+    await db.update(users).set({ collegeId: 'inst-audit' });
+
     await db.insert(teachers).values({
       id: 'teacher-prof',
       userId: 'teacher-audit-user',

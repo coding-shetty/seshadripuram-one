@@ -23,11 +23,13 @@ function createToken(userId: string, role: 'STUDENT' | 'ADMIN'): string {
 async function createUser(role: 'STUDENT' | 'ADMIN'): Promise<string> {
   const id = randomUUID();
   createdUserIds.push(id);
+  await db.insert(institutions).values({ id: 'import-test-college', code: 'IMPORT-TEST', name: 'Import test college' }).onConflictDoNothing();
   await db.insert(users).values({
     id,
     role,
     institutionId: `${role}-${id}`,
     accountStatus: 'ACTIVE',
+    collegeId: 'import-test-college',
   });
   return id;
 }

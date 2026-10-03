@@ -33,7 +33,7 @@ export function verifyAccessToken(token: string): AccessTokenClaims {
     issuer: config.jwtIssuer,
     audience: config.jwtAudience,
   });
-  if (typeof decoded === "string" || !decoded.sub || !decoded.role || !decoded.institutionId) {
+  if (typeof decoded === "string" || typeof decoded.sub !== "string" || !decoded.sub || typeof decoded.role !== "string" || typeof decoded.institutionId !== "string" || !decoded.institutionId || typeof decoded.exp !== "number") {
     throw new Error("Invalid access token payload");
   }
   if (!["STUDENT", "TEACHER", "ADMIN"].includes(decoded.role)) {

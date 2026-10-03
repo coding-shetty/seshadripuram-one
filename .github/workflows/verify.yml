@@ -1,0 +1,51 @@
+name: Verify
+on:
+  pull_request:
+  push:
+    branches: [main, arena/01a1035d-seshadripuram-one]
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npx --yes npm@11.14.1 ci
+      - run: npm run typecheck
+      - run: npm audit --audit-level=moderate
+      - run: npm run db:check
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: python3 -m unittest discover -s scripts -p "*_test.py"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage
+          retention-days: 7
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test --coverage
+      # Compilation check only. This is not a deployable production artifact.
+      - run: flutter build web --release --dart-define=API_BASE_URL=https://api.example.invalid

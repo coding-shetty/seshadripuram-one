@@ -71,9 +71,9 @@ export async function handleGracefulShutdown(
   return shutdownPromise;
 }
 
-export function setupGracefulShutdown(server: Server, timeoutMs = 10000): void {
+export function setupGracefulShutdown(server: Server, timeoutMs = 10000, closeDb: () => Promise<void> | void = closeDatabase): void {
   const handler = (signal: string) => {
-    handleGracefulShutdown(signal, { server, timeoutMs }).catch((err) => {
+    handleGracefulShutdown(signal, { server, timeoutMs, closeDb }).catch((err) => {
       logger.error({ event: 'unhandled_shutdown_error', error: String(err) });
       process.exit(1);
     });

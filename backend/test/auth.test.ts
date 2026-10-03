@@ -69,8 +69,8 @@ beforeEach(async () => {
 });
 
 describe("authentication activation flow", () => {
-  it("rejects an unknown institution ID and exposes no registration endpoint", async () => {
-    await request(app).post("/api/auth/request-activation").send({ institutionId: "UNKNOWN" }).expect(404);
+  it("does not disclose an unknown institution ID and exposes no registration endpoint", async () => {
+    await request(app).post("/api/auth/request-activation").send({ institutionId: "UNKNOWN" }).expect(202);
     await request(app).post("/api/auth/register").send({ role: "ADMIN" }).expect(404);
   });
 
@@ -96,7 +96,7 @@ describe("authentication activation flow", () => {
   it("requires a verified activation grant and does not duplicate users", async () => {
     await request(app).post("/api/auth/set-password").send({ institutionId: "S-001", activationGrant: "not-valid", password: "secure-password-123" }).expect(401);
     await activate("S-001");
-    await request(app).post("/api/auth/request-activation").send({ institutionId: "S-001" }).expect(409);
+    await request(app).post("/api/auth/request-activation").send({ institutionId: "S-001" }).expect(202);
     const accounts = await db.select().from(users);
     expect(accounts.filter((account) => account.institutionId === "S-001")).toHaveLength(1);
   });

@@ -6,12 +6,14 @@ export const users = sqliteTable("users", {
   role: text("role").notNull(), // 'STUDENT' | 'TEACHER' | 'ADMIN'
   passwordHash: text("password_hash"),
   accountStatus: text("account_status").notNull().default("PRE_PROVISIONED"),
+  // Legacy login identifier (student/employee ID), NOT a college ID.
   institutionId: text("institution_id"),
+  collegeId: text("college_id").references(() => institutions.id),
   contactEmail: text("contact_email"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [uniqueIndex("users_institution_id_unique").on(table.institutionId)]);
+}, (table) => [uniqueIndex("users_institution_id_unique").on(table.institutionId), index("users_college_idx").on(table.collegeId)]);
 
 export const students = sqliteTable("students", {
   id: text("id").primaryKey(),
@@ -34,9 +36,11 @@ export const teachers = sqliteTable("teachers", {
 export const auditLogs = sqliteTable("audit_logs", {
   id: text("id").primaryKey(),
   action: text("action").notNull(),
+  collegeId: text("college_id").references(() => institutions.id),
   details: text("details"),
   timestamp: text("timestamp").default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
+  index("audit_logs_college_idx").on(table.collegeId),
   index("audit_logs_action_idx").on(table.action),
   index("audit_logs_timestamp_idx").on(table.timestamp),
 ]);
@@ -205,6 +209,7 @@ export const teachingAssignments = sqliteTable('teaching_assignments', {
 export const importJobs = sqliteTable('import_jobs', {
   id: text('id').primaryKey(),
   actorUserId: text('actor_user_id').notNull().references(() => users.id),
+  collegeId: text('college_id').references(() => institutions.id),
   entity: text('entity').notNull(),
   status: text('status').notNull().default('PREVIEWED'), // PREVIEWED | COMMITTED | FAILED
   totalRows: integer('total_rows').notNull(),
@@ -217,6 +222,7 @@ export const importJobs = sqliteTable('import_jobs', {
 }, (table) => [
   index('import_jobs_actor_idx').on(table.actorUserId),
   index('import_jobs_created_idx').on(table.createdAt),
+  index('import_jobs_college_idx').on(table.collegeId),
   index('import_jobs_status_idx').on(table.status),
 ]);
 
@@ -282,3 +288,10 @@ export const attendanceRecords = sqliteTable('attendance_records', {
   index('attendance_section_idx').on(table.sectionId, table.date),
   index('attendance_subject_idx').on(table.subjectId),
 ]);
+
+// Shared durable auth throttling: no paid Redis service is required.
+export const rateLimitBuckets = sqliteTable('rate_limit_buckets', {
+  key: text('key').primaryKey(),
+  hits: integer('hits').notNull(),
+  resetAt: integer('reset_at').notNull(),
+}, (table) => [index('rate_limit_reset_idx').on(table.resetAt)]);

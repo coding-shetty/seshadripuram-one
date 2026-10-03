@@ -64,6 +64,13 @@ describe('Cross-institution tenant isolation & IDOR prevention', () => {
       { id: 'user-adm-b', role: 'ADMIN', institutionId: 'UID-ADM-B', contactEmail: 'adm-b@beta.edu', accountStatus: 'ACTIVE' },
     ]);
 
+    for (const id of ['user-stu-a', 'user-tea-a', 'user-adm-a']) {
+      await db.update(users).set({ collegeId: 'inst-a' }).where(eq(users.id, id));
+    }
+    for (const id of ['user-stu-b', 'user-adm-b']) {
+      await db.update(users).set({ collegeId: 'inst-b' }).where(eq(users.id, id));
+    }
+
     await db.insert(students).values([
       { id: 'prof-stu-a', userId: 'user-stu-a', studentId: 'S-A-1', fullName: 'Student Alpha', contactEmail: 'stu-a@alpha.edu' },
       { id: 'prof-stu-b', userId: 'user-stu-b', studentId: 'S-B-1', fullName: 'Student Beta', contactEmail: 'stu-b@beta.edu' },
@@ -160,7 +167,7 @@ describe('Cross-institution tenant isolation & IDOR prevention', () => {
     it('prevents a different Admin within the same institution from accessing or committing another admins import job', async () => {
       const adminA2_Token = createAccessToken({ sub: 'user-adm-a2', role: 'ADMIN', institutionId: 'inst-a' });
       await db.insert(users).values({
-        id: 'user-adm-a2',
+        id: 'user-adm-a2', collegeId: 'inst-a',
         role: 'ADMIN',
         institutionId: 'UID-ADM-A2',
         contactEmail: 'adm-a2@alpha.edu',

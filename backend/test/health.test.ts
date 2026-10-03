@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm';
+import { db } from '../src/db';
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src';
@@ -30,4 +32,12 @@ describe('health and readiness probes', () => {
     expect(readyRes.status).toBe(200);
     expect(readyRes.body).toEqual({ status: 'ready' });
   });
+  it('is not ready when the new required schema has not been migrated', async () => {
+    await db.run(sql`DROP TABLE rate_limit_buckets`);
+    const ready = await request(app).get('/readyz');
+    expect(ready.status).toBe(503);
+    expect(ready.body).toEqual({ status: 'not_ready' });
+    expect((await request(app).get('/healthz')).status).toBe(200);
+  });
+
 });

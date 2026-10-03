@@ -25,6 +25,21 @@ import type { AppRole } from '../services/tokenService';
 
 export const academicRouter = Router();
 
+export async function sectionsForCollege(collegeId: string) {
+  return db.select({ id: sections.id, name: sections.name, departmentId: departments.id })
+    .from(sections)
+    .innerJoin(programs, eq(sections.programId, programs.id))
+    .innerJoin(departments, eq(programs.departmentId, departments.id))
+    .where(and(eq(departments.institutionId, collegeId), eq(sections.isActive, true)));
+}
+
+async function canAccessSection(ctx: AcademicContext, role: AppRole, sectionId: string) {
+  if (!ctx.institutionId) return false;
+  if (role === 'TEACHER') return ctx.sectionIds.includes(sectionId);
+  return (await sectionsForCollege(ctx.institutionId)).some((section) => section.id === sectionId);
+}
+
+
 interface AcademicContext {
   institutionId: string | null;
   sectionId: string | null;
@@ -87,7 +102,7 @@ export async function resolveCallerAcademicContext(
 
       for (const assignment of assignments) {
         const offering = await db.select().from(subjectOfferings).where(eq(subjectOfferings.id, assignment.subjectOfferingId)).get();
-        if (offering) {
+        if (offering?.isActive) {
           sectionIds.push(offering.sectionId);
           const section = await db.select().from(sections).where(eq(sections.id, offering.sectionId)).get();
           if (section) {
@@ -108,25 +123,32 @@ export async function resolveCallerAcademicContext(
     }
   }
 
-  // Fallback: If institutionId was not resolved from enrollment/assignment hierarchy,
-  // check fallbackInstitutionId against institutions table (by id or code)
-  if (!institutionId && fallbackInstitutionId) {
-    const inst = await db
-      .select({ id: institutions.id })
-      .from(institutions)
-      .where(or(eq(institutions.id, fallbackInstitutionId), eq(institutions.code, fallbackInstitutionId)))
-      .get();
-    if (inst) {
-      institutionId = inst.id;
+  // College membership is separate from the login identifier in the JWT.
+  // Existing academic links may resolve student/teacher scope; administrators
+  // must always have an explicit membership. Never guess a college from a token.
+  const account = await db.select().from(users).where(eq(users.id, userId)).get();
+  if (account?.collegeId) {
+    if (institutionId && institutionId !== account.collegeId) {
+      return { institutionId: null, sectionId: null, sectionName: null,
+        departmentId: null, sectionIds: [], sectionNames: [], teacherId: null, studentId: null };
     }
+    institutionId = account.collegeId;
   }
+  if (institutionId) {
+    const college = await db.select().from(institutions).where(eq(institutions.id, institutionId)).get();
+    if (!college?.isActive) institutionId = null;
+  }
+  // A teacher's assignments must not grant accidental access to another college.
+  const permittedSections = institutionId ? await sectionsForCollege(institutionId) : [];
+  const permittedIds = new Set(permittedSections.map((section) => section.id));
+  const safeSectionIds = sectionIds.filter((id) => permittedIds.has(id));
 
   return {
     institutionId,
     sectionId,
     sectionName,
     departmentId,
-    sectionIds: [...new Set(sectionIds)],
+    sectionIds: [...new Set(safeSectionIds)],
     sectionNames: [...new Set(sectionNames)],
     teacherId,
     studentId,
@@ -165,8 +187,15 @@ academicRouter.get('/announcements', requireAuthentication, async (req, res) => 
     }
     if (ctx.departmentId) {
       conditions.push(or(isNull(announcements.departmentId), eq(announcements.departmentId, ctx.departmentId)));
+    } else {
+      conditions.push(isNull(announcements.departmentId));
     }
   } else if (role === 'TEACHER') {
+    const allowedDepartments = (await sectionsForCollege(ctx.institutionId))
+      .filter((section) => ctx.sectionIds.includes(section.id)).map((section) => section.departmentId);
+    conditions.push(allowedDepartments.length
+      ? or(isNull(announcements.departmentId), inArray(announcements.departmentId, allowedDepartments))
+      : isNull(announcements.departmentId));
     if (ctx.sectionIds.length > 0) {
       conditions.push(or(isNull(announcements.sectionId), inArray(announcements.sectionId, ctx.sectionIds)));
     } else {
@@ -218,6 +247,18 @@ academicRouter.post('/announcements', requireAuthentication, requireRole('TEACHE
     }
   }
 
+  if (sectionId && !(await canAccessSection(ctx, req.auth!.role, sectionId))) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
+  }
+  if (departmentId) {
+    const department = await db.select().from(departments).where(and(
+      eq(departments.id, departmentId), eq(departments.institutionId, ctx.institutionId)
+    )).get();
+    if (!department || (req.auth!.role === 'TEACHER' && departmentId !== ctx.departmentId)) {
+      return res.status(403).json({ error: 'Department is outside your permitted scope' });
+    }
+  }
+
   const id = randomUUID();
   await db.insert(announcements).values({
     id,
@@ -236,6 +277,7 @@ academicRouter.post('/announcements', requireAuthentication, requireRole('TEACHE
   await db.insert(auditLogs).values({
     id: randomUUID(),
     action: 'ANNOUNCEMENT_CREATED',
+    collegeId: ctx.institutionId,
     details: JSON.stringify({
       announcementId: id,
       authorUserId: req.auth!.sub,
@@ -274,7 +316,7 @@ academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
   if (role === 'STUDENT') {
     const studentConditions = [];
     if (ctx.sectionId) studentConditions.push(eq(timetableEntries.sectionId, ctx.sectionId));
-    if (ctx.sectionName) studentConditions.push(eq(timetableEntries.sectionName, ctx.sectionName));
+
     if (studentConditions.length === 0) {
       return res.json({ timetable: [] });
     }
@@ -284,7 +326,7 @@ academicRouter.get('/timetable', requireAuthentication, async (req, res) => {
     const teacherConditions = [];
     if (ctx.teacherId) teacherConditions.push(eq(timetableEntries.teacherId, ctx.teacherId));
     if (ctx.sectionIds.length > 0) teacherConditions.push(inArray(timetableEntries.sectionId, ctx.sectionIds));
-    if (ctx.sectionNames.length > 0) teacherConditions.push(inArray(timetableEntries.sectionName, ctx.sectionNames));
+
     if (teacherConditions.length === 0) {
       return res.json({ timetable: [] });
     }
@@ -324,6 +366,10 @@ academicRouter.get('/sections/:sectionId/students', requireAuthentication, requi
     }
   }
 
+  if (!(await canAccessSection(ctx, req.auth!.role, sectionId))) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
+  }
+
   const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
   if (!section) {
     return res.status(404).json({ error: 'Section not found' });
@@ -350,7 +396,7 @@ academicRouter.get('/sections/:sectionId/students', requireAuthentication, requi
 const postAttendanceSchema = z.object({
   sectionId: z.string().trim().min(1, 'sectionId is required'),
   subjectId: z.string().trim().optional(),
-  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  date: z.iso.date(),
   period: z.coerce.number().int().min(1).max(12).default(1),
   records: z.array(
     z.object({
@@ -358,7 +404,7 @@ const postAttendanceSchema = z.object({
       status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
       remarks: z.string().trim().max(250).optional(),
     })
-  ).min(1, 'At least one student record is required'),
+  ).min(1, 'At least one student record is required').max(500),
 });
 
 academicRouter.post('/attendance', requireAuthentication, requireRole('TEACHER', 'ADMIN'), async (req, res) => {
@@ -383,12 +429,38 @@ academicRouter.post('/attendance', requireAuthentication, requireRole('TEACHER',
     }
   }
 
+  if (!(await canAccessSection(ctx, req.auth!.role, sectionId))) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
+  }
+  if (new Set(records.map((record) => record.studentId)).size !== records.length) {
+    return res.status(400).json({ error: 'Duplicate students in attendance submission' });
+  }
+  const enrolled = await db.select({ id: students.id }).from(enrollments)
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .where(and(eq(enrollments.sectionId, sectionId), eq(enrollments.status, 'ACTIVE'), eq(students.isActive, true)));
+  const enrolledIds = new Set(enrolled.map((student) => student.id));
+  if (records.some((record) => !enrolledIds.has(record.studentId))) {
+    return res.status(400).json({ error: 'Every student must be actively enrolled in this section' });
+  }
+  if (subjectId) {
+    const offering = await db.select().from(subjectOfferings).where(and(
+      eq(subjectOfferings.sectionId, sectionId), eq(subjectOfferings.subjectId, subjectId), eq(subjectOfferings.isActive, true)
+    )).get();
+    if (!offering) return res.status(400).json({ error: 'Subject is not offered in this section' });
+    if (req.auth!.role === 'TEACHER') {
+      const assignment = ctx.teacherId && await db.select().from(teachingAssignments).where(and(
+        eq(teachingAssignments.teacherId, ctx.teacherId), eq(teachingAssignments.subjectOfferingId, offering.id), eq(teachingAssignments.isActive, true)
+      )).get();
+      if (!assignment) return res.status(403).json({ error: 'You are not assigned to this subject' });
+    }
+  }
+
   const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
   if (!section) {
     return res.status(404).json({ error: 'Section not found' });
   }
 
-  const institutionId = ctx.institutionId || req.auth!.institutionId;
+  const institutionId = ctx.institutionId;
 
   await db.transaction(async (tx) => {
     for (const rec of records) {
@@ -439,6 +511,7 @@ academicRouter.post('/attendance', requireAuthentication, requireRole('TEACHER',
     await tx.insert(auditLogs).values({
       id: randomUUID(),
       action: 'ATTENDANCE_RECORDED',
+      collegeId: ctx.institutionId,
       details: JSON.stringify({
         sectionId,
         date,
@@ -563,11 +636,15 @@ academicRouter.get('/attendance', requireAuthentication, async (req, res) => {
   if (period) conditions.push(eq(attendanceRecords.period, period));
   if (subjectId) conditions.push(eq(attendanceRecords.subjectId, subjectId));
 
-  if (conditions.length === 0) {
-    if (role === 'TEACHER' && ctx.sectionIds.length > 0) {
-      conditions.push(inArray(attendanceRecords.sectionId, ctx.sectionIds));
-    }
+  if (!ctx.institutionId) return res.json({ attendance: [] });
+  const permittedSectionIds = role === 'TEACHER' ? ctx.sectionIds
+    : (await sectionsForCollege(ctx.institutionId)).map((section) => section.id);
+  if (permittedSectionIds.length === 0) return res.json({ attendance: [] });
+  if (sectionId && !permittedSectionIds.includes(sectionId)) {
+    return res.status(403).json({ error: 'Section is outside your permitted scope' });
   }
+  conditions.push(inArray(attendanceRecords.sectionId, permittedSectionIds));
+  conditions.push(eq(attendanceRecords.institutionId, ctx.institutionId));
 
   const rows = await db
     .select({

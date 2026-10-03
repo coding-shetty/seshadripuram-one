@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m1
     scripts:
       - name: Install backend dependencies
-        script: cd backend && npm ci
+        script: cd backend && npx --yes npm@11.14.1 ci
       - name: Typecheck backend
         script: cd backend && npm run typecheck
       - name: Lint backend
@@ -84,3 +84,31 @@ workflows:
         script: flutter build windows --debug
     artifacts:
       - build/windows/runner/Debug/*.exe
+
+  android-release:
+    name: Signed Android Release (manual)
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      groups:
+        - production_android
+    scripts:
+      - name: Validate release configuration
+        script: |
+          set -eu
+          case "$API_BASE_URL" in https://*) ;; *) echo "HTTPS API_BASE_URL is required"; exit 1;; esac
+          : "${ANDROID_APPLICATION_ID:?Required}"
+          : "${ANDROID_KEYSTORE_PATH:?Provision the keystore as a secure file}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Required}"
+          : "${ANDROID_KEY_ALIAS:?Required}"
+          : "${ANDROID_KEY_PASSWORD:?Required}"
+      - name: Verify Flutter
+        script: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+      - name: Build signed release
+        script: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk

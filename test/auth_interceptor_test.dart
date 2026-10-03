@@ -162,4 +162,24 @@ void main() {
           data: any(named: 'data'),
         )).called(1);
   });
+  test('temporary refresh network failures preserve stored credentials', () async {
+    when(() => storage.getRefreshToken()).thenAnswer((_) async => 'valid-refresh-token');
+    when(() => refreshDio.post<Map<String, dynamic>>(
+          '/api/auth/refresh', data: any(named: 'data'),
+        )).thenThrow(DioException(
+          requestOptions: RequestOptions(path: '/api/auth/refresh'),
+          type: DioExceptionType.connectionTimeout,
+        ));
+    final options = RequestOptions(path: '/api/academic/timetable');
+    final handler = _MockErrorHandler();
+    await interceptor.onError(DioException(
+      requestOptions: options,
+      response: Response(requestOptions: options, statusCode: 401),
+    ), handler);
+    verifyNever(() => storage.deleteToken());
+    verifyNever(() => storage.deleteRefreshToken());
+    expect(authFailureCalled, isFalse);
+    verify(() => handler.next(any())).called(1);
+  });
+
 }

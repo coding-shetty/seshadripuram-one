@@ -1,20 +1,40 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   static const String appName = 'Seshadripuram One';
-
-  /// Supply with `--dart-define=API_BASE_URL=https://your-api.example`.
-  /// Deliberately empty by default: this project does not assume a hosted domain.
-  ///
-  /// Android Emulator Note:
-  /// On an Android emulator, `http://localhost:3000` refers to the emulator's
-  /// internal loopback interface, not your development workstation.
-  /// Use `http://10.0.2.2:3000` to connect to your host machine's backend.
-  /// Cleartext HTTP is permitted in debug mode via `android:usesCleartextTraffic="true"`.
   static const String configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+  static const bool enableDemoFeatures = !kReleaseMode &&
+      bool.fromEnvironment('ENABLE_DEMO_FEATURES', defaultValue: false);
+
+  /// Development/test override only. Ignored in release builds.
   static String? debugBaseUrl;
 
   static String get baseUrl {
-    if (debugBaseUrl != null && debugBaseUrl!.isNotEmpty) return debugBaseUrl!;
-    if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
-    return 'http://localhost:8080';
+    if (!kReleaseMode && debugBaseUrl?.isNotEmpty == true) {
+      return debugBaseUrl!;
+    }
+    if (configuredBaseUrl.isNotEmpty) {
+      validateApiUrl(configuredBaseUrl, requireHttps: kReleaseMode);
+      return configuredBaseUrl;
+    }
+    if (kReleaseMode) {
+      throw StateError('A release build requires --dart-define=API_BASE_URL=https://your-api-host');
+    }
+    // Android emulators must use --dart-define=API_BASE_URL=http://10.0.2.2:3000.
+    return 'http://localhost:3000';
+  }
+
+  static void validateApiUrl(String value, {required bool requireHttps}) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasAuthority || uri.host.isEmpty ||
+        !['http', 'https'].contains(uri.scheme) || uri.userInfo.isNotEmpty ||
+        uri.hasQuery || uri.hasFragment) {
+      throw StateError('API_BASE_URL must be an HTTP(S) URL without credentials, query, or fragment');
+    }
+    if (requireHttps && (uri.scheme != 'https' ||
+        uri.host == 'localhost' || uri.host.endsWith('.localhost') ||
+        uri.host == '127.0.0.1' || uri.host == '::1')) {
+      throw StateError('Release builds require a non-loopback HTTPS API_BASE_URL');
+    }
   }
 }

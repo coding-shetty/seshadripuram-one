@@ -1,3 +1,4 @@
+import '../../../../core/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -141,7 +142,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
             icon: const Icon(Icons.fact_check_outlined),
             label: const Text('Take attendance', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
-          OutlinedButton.icon(onPressed: () => context.push('/teacher/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('New assignment')),
+          if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/teacher/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('New assignment')),
           OutlinedButton.icon(onPressed: () => context.push('/teacher/announcements'), icon: const Icon(Icons.campaign_outlined), label: const Text('Announcement')),
         ]),
       ]),

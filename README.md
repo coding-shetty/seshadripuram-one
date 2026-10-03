@@ -1,3 +1,10 @@
+> **Release hardening status (4 October 2026):** This is not yet a certified
+> production deployment. Read [the fix-audit status](docs/fix-audit-status.md) and
+> [zero-cost release runbook](docs/zero-cost-release.md) before merging/deploying.
+> They document the new membership migrations, release requirements, verified
+> checks and remaining launch gates. Older planning documents are not proof of
+> deployment readiness.
+
 <div align="center">
 # 🎓 Seshadripuram One
  
