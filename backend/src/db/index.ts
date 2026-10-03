@@ -9,6 +9,9 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 function resolveInitialUrl(): string {
+  if (process.env.NODE_ENV === 'production' && !process.env.TURSO_DATABASE_URL?.trim()) {
+    throw new Error('TURSO_DATABASE_URL must be explicitly configured in production');
+  }
   const url = process.env.TURSO_DATABASE_URL || "file:./local.db";
   if (process.env.NODE_ENV === "test") {
     assertTestDatabaseSafe(url);

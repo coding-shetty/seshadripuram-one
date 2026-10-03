@@ -84,15 +84,15 @@ describe('Auth routes: Comprehensive failure paths & validation boundaries', () 
       expect(res2.status).toBe(400);
     });
 
-    it('rejects nonexistent institutionId with 404', async () => {
+    it('does not disclose nonexistent institutionId', async () => {
       const res = await request(app).post('/api/auth/request-activation').send({ institutionId: 'NONEXISTENT-999' });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(202);
     });
 
-    it('rejects activation for already ACTIVE account with 409', async () => {
+    it('does not disclose already ACTIVE accounts', async () => {
       const res = await request(app).post('/api/auth/request-activation').send({ institutionId: 'S-ACTIVE' });
-      expect(res.status).toBe(409);
-      expect(res.body.error).toMatch(/already activated/i);
+      expect(res.status).toBe(202);
+      expect(res.body.message).toMatch(/if the account is eligible/i);
     });
   });
 

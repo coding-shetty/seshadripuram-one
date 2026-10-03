@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import request from 'supertest';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { db } from '../src/db';
 import {
@@ -411,4 +412,82 @@ describe('Academic Attendance Lifecycle & Real Calculations', () => {
       expect(res.body.bySubject).toHaveLength(0);
     });
   });
+  describe('Audit regression: authorization is independent of filters', () => {
+    async function addOtherSectionRecord() {
+      const section = await db.select().from(sections).where(eq(sections.id, secId)).get();
+      const otherSection = randomUUID();
+      await db.insert(sections).values({ ...section!, id: otherSection, name: 'Other section' });
+      await db.insert(attendanceRecords).values({
+        id: randomUUID(), institutionId: instId, sectionId: otherSection,
+        studentId: student2Id, subjectId, date: '2026-10-04', period: 1, status: 'PRESENT',
+      });
+      await db.insert(attendanceRecords).values({
+        id: randomUUID(), institutionId: instId, sectionId: secId,
+        studentId: student1Id, subjectId, date: '2026-10-04', period: 1, status: 'PRESENT',
+      });
+      return otherSection;
+    }
+
+    it.each(['date=2026-10-04', 'period=1', 'limit=1', ''])('cannot bypass section scope with %s', async (query) => {
+      await addOtherSectionRecord();
+      const res = await request(app).get(`/api/academic/attendance?${query}`)
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.attendance).toHaveLength(1);
+      expect(res.body.attendance[0].sectionId).toBe(secId);
+    });
+
+    it('subject-only filters do not widen section scope', async () => {
+      await addOtherSectionRecord();
+      const res = await request(app).get(`/api/academic/attendance?subjectId=${subjectId}`)
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.attendance.map((row: any) => row.sectionId)).toEqual([secId]);
+    });
+
+    it('returns no records for a teacher without active assignments', async () => {
+      await addOtherSectionRecord();
+      await db.delete(teachingAssignments);
+      const res = await request(app).get('/api/academic/attendance?date=2026-10-04')
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.attendance).toEqual([]);
+    });
+
+    it('rejects inactive teachers immediately with an existing access token', async () => {
+      await db.update(teachers).set({ isActive: false }).where(eq(teachers.id, teacherId));
+      const res = await request(app).get('/api/academic/attendance')
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects inactive users immediately with an existing access token', async () => {
+      await db.update(users).set({ isActive: false }).where(eq(users.id, teacherUserId));
+      const res = await request(app).get('/api/academic/attendance')
+        .set('Authorization', `Bearer ${teacherToken}`);
+      expect(res.status).toBe(401);
+    });
+
+    it('does not accept attendance for students outside the section', async () => {
+      await db.delete(enrollments).where(eq(enrollments.studentId, student2Id));
+      const res = await request(app).post('/api/academic/attendance')
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ sectionId: secId, date: '2026-10-04', records: [{ studentId: student2Id, status: 'PRESENT' }] });
+      expect(res.status).toBe(400);
+      expect(await db.select().from(attendanceRecords)).toEqual([]);
+    });
+
+    it('rejects duplicate students and invalid calendar dates', async () => {
+      for (const payload of [
+        { date: '2026-02-30', records: [{ studentId: student1Id, status: 'PRESENT' }] },
+        { date: '2026-10-04', records: [{ studentId: student1Id, status: 'PRESENT' }, { studentId: student1Id, status: 'ABSENT' }] },
+      ]) {
+        const res = await request(app).post('/api/academic/attendance')
+          .set('Authorization', `Bearer ${teacherToken}`).send({ sectionId: secId, ...payload });
+        expect(res.status).toBe(400);
+      }
+      expect(await db.select().from(attendanceRecords)).toEqual([]);
+    });
+  });
+
 });

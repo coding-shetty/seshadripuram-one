@@ -33,7 +33,8 @@ function isSensitiveKey(key: string): boolean {
 }
 
 export function sanitize(data: unknown, depth = 0): unknown {
-  if (depth > 5 || data === null || data === undefined) return data;
+  if (depth > 5) return '[TRUNCATED]';
+  if (data === null || data === undefined) return data;
   if (typeof data === 'string') {
     if (data.startsWith('Bearer ')) return 'Bearer [REDACTED]';
     return data;
@@ -101,7 +102,8 @@ export const logger = {
 
 export function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
-  const requestId = req.header('x-request-id')?.trim() || randomUUID();
+  const suppliedId = req.header('x-request-id')?.trim();
+  const requestId = suppliedId && /^[a-zA-Z0-9_-]{1,100}$/.test(suppliedId) ? suppliedId : randomUUID();
   res.setHeader('x-request-id', requestId);
   res.locals.requestId = requestId;
 
@@ -113,17 +115,14 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
       event: 'http_request',
       requestId,
       method: req.method,
-      url: req.originalUrl,
+      url: req.originalUrl.split('?')[0],
       statusCode: res.statusCode,
       durationMs,
       ip: req.ip,
       userAgent: req.header('user-agent'),
     };
 
-    // Never log request bodies on auth routes
-    if (!isAuthRoute && req.body && Object.keys(req.body).length > 0) {
-      logPayload.body = sanitize(req.body);
-    }
+    // Academic/import bodies contain student PII. Never log request bodies.
 
     if (res.statusCode >= 500) {
       logger.error(logPayload);

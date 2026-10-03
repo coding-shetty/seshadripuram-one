@@ -26,6 +26,10 @@ export class SmtpOtpService implements OtpService {
       host: smtpConfig.host,
       port: smtpConfig.port,
       secure: smtpConfig.secure ?? (smtpConfig.port === 465),
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      requireTLS: !(smtpConfig.secure ?? (smtpConfig.port === 465)),
       auth: {
         user: smtpConfig.user,
         pass: smtpConfig.pass,
@@ -73,6 +77,7 @@ export class ResendOtpService implements OtpService {
   async sendOtp(destination: string, otp: string): Promise<void> {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${config.resendApiKey}`,
         'Content-Type': 'application/json',

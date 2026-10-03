@@ -69,4 +69,16 @@ describe('structured logging and redaction', () => {
 
     logSpy.mockRestore();
   });
+  it('does not record student import bodies or URL query secrets', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await request(createApp()).post('/api/admin/imports/preview?secret=private-query')
+        .send({ rows: [{ fullName: 'Private Student Name', contactEmail: 'private@example.test' }] });
+      const output = JSON.stringify(warn.mock.calls);
+      expect(output).not.toContain('Private Student Name');
+      expect(output).not.toContain('private@example.test');
+      expect(output).not.toContain('private-query');
+    } finally { warn.mockRestore(); }
+  });
+
 });

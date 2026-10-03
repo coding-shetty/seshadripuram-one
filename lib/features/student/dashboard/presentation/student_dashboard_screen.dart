@@ -1,3 +1,4 @@
+import '../../../../core/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,14 +16,14 @@ class StudentDashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final displayName = user?.name.isNotEmpty == true ? user!.name : 'Student';
-    final roleSubtitle = user != null ? 'Student • ${user.institutionId}' : 'BCA • Semester 4 • Section A';
+    final roleSubtitle = user != null ? 'Student • ${user.institutionId}' : 'Student portal';
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
 
     final attendanceAsync = ref.watch(attendanceProvider);
     final attendanceValue = attendanceAsync.when(
       data: (summary) => summary.overall.totalClasses > 0
           ? '${summary.overall.percentage.toStringAsFixed(1)}%'
-          : '100% (New)',
+          : 'No records',
       loading: () => '...',
       error: (_, _) => '--',
     );
@@ -86,8 +87,8 @@ class StudentDashboardScreen extends ConsumerWidget {
           final explore = Wrap(spacing: AppSpacing.sm, runSpacing: AppSpacing.sm, children: [
             OutlinedButton.icon(onPressed: () => context.push('/student/timetable'), icon: const Icon(Icons.calendar_month_outlined), label: const Text('Full timetable')),
             OutlinedButton.icon(onPressed: () => context.push('/student/attendance'), icon: const Icon(Icons.event_available), label: const Text('Attendance')),
-            OutlinedButton.icon(onPressed: () => context.push('/student/marks'), icon: const Icon(Icons.auto_graph_outlined), label: const Text('Marks')),
-            OutlinedButton.icon(onPressed: () => context.push('/student/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('Assignments')),
+            if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/student/marks'), icon: const Icon(Icons.auto_graph_outlined), label: const Text('Marks')),
+            if (AppConfig.enableDemoFeatures) OutlinedButton.icon(onPressed: () => context.push('/student/assignments'), icon: const Icon(Icons.assignment_outlined), label: const Text('Assignments')),
             OutlinedButton.icon(onPressed: () => context.push('/student/announcements'), icon: const Icon(Icons.campaign_outlined), label: const Text('All notices')),
           ]);
           if (!wide) {

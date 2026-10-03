@@ -128,8 +128,13 @@ class AuthInterceptor extends Interceptor {
       }
 
       return newAccessToken;
-    } catch (_) {
-      return null;
+    } on DioException catch (error) {
+      // Losing the network is not a revoked session. Preserve credentials so
+      // the user can retry after connectivity returns.
+      if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
+        return null;
+      }
+      rethrow;
     } finally {
       _refreshFuture = null;
     }

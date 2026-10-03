@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db';
-import { activationGrants, announcements, authSessions, importJobs, students, teachers, users } from '../src/db/schema';
+import { activationGrants, announcements, authSessions, importJobs, institutions, students, teachers, users } from '../src/db/schema';
 import { createApp } from '../src/index';
 import { createAccessToken } from '../src/services/tokenService';
 
@@ -58,9 +58,11 @@ describe('backend reliability & error handling', () => {
 
   it('accepts large payloads (>32kb) on the admin import preview route', async () => {
     const adminId = randomUUID();
+    await db.insert(institutions).values({ id: 'reliability-college', code: 'RELIABILITY', name: 'Reliability college' }).onConflictDoNothing();
     await db.insert(users).values({
       id: adminId,
       role: 'ADMIN',
+      collegeId: 'reliability-college',
       institutionId: `ADMIN-${adminId}`,
       accountStatus: 'ACTIVE',
     });

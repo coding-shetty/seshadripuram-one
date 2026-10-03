@@ -22,7 +22,7 @@ function value(row: ImportRow, field: string): string {
   return String(row[field] ?? '').trim();
 }
 
-export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRow[]): Promise<number> {
+export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRow[], collegeId?: string): Promise<number> {
   if (!isCommitSupported(entity)) {
     throw new ImportCommitError('UNSUPPORTED_ENTITY', `Commit is not implemented for ${entity}; preview only is available`);
   }
@@ -69,6 +69,7 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
       id: userId,
       role: entity === 'students' ? 'STUDENT' : 'TEACHER',
       institutionId,
+      collegeId: collegeId ?? null,
       contactEmail: email,
     });
 
@@ -81,7 +82,7 @@ export async function commitImport(tx: any, entity: ImportEntity, rows: ImportRo
   return rows.length;
 }
 
-export async function markImportCommitted(tx: any, jobId: string, actorUserId: string, entity: ImportEntity, count: number): Promise<void> {
+export async function markImportCommitted(tx: any, jobId: string, actorUserId: string, entity: ImportEntity, count: number, collegeId?: string): Promise<void> {
   await tx.update(importJobs).set({
     status: 'COMMITTED',
     payloadJson: null,
@@ -90,6 +91,7 @@ export async function markImportCommitted(tx: any, jobId: string, actorUserId: s
   await tx.insert(auditLogs).values({
     id: randomUUID(),
     action: 'ACADEMIC_IMPORT_COMMITTED',
+    collegeId: collegeId ?? null,
     details: JSON.stringify({ jobId, entity, rows: count, actorUserId }),
   });
 }

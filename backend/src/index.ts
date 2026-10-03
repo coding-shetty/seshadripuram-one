@@ -4,13 +4,15 @@ import helmet from 'helmet';
 import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { config } from './config';
-import { db } from './db';
+import { users, rateLimitBuckets } from './db/schema';
+import { db, closeDatabase } from './db';
+import { startMaintenance } from './services/maintenance';
 import { academicRouter } from './routes/academic';
 import { adminRouter } from './routes/admin';
 import { createAuthRouter, type AuthRouterOptions } from './routes/auth';
 
 import { logger, requestLoggerMiddleware } from './utils/logger';
-import { centralErrorHandler } from './utils/errors';
+import { centralErrorHandler, ForbiddenError } from './utils/errors';
 
 export * from './utils/errors';
 export * from './utils/logger';
@@ -45,7 +47,7 @@ export function createApp(options: AppOptions = {}) {
       if (!origin || config.corsOrigins.includes(origin) || (config.nodeEnv === 'development' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
         return callback(null, true);
       }
-      return callback(new Error('Origin is not allowed'));
+      return callback(new ForbiddenError('Origin is not allowed'));
     },
   }));
 
@@ -63,7 +65,8 @@ export function createApp(options: AppOptions = {}) {
   const healthHandler = (_req: express.Request, res: express.Response) => res.json({ status: 'ok' });
   const readyHandler = async (_req: express.Request, res: express.Response) => {
     try {
-      await db.run(sql`SELECT 1`);
+      await db.select().from(users).limit(0);
+      await db.select().from(rateLimitBuckets).limit(0);
       return res.json({ status: 'ready' });
     } catch {
       return res.status(503).json({ status: 'not_ready' });
@@ -89,8 +92,12 @@ export function createApp(options: AppOptions = {}) {
 import { setupGracefulShutdown } from './utils/shutdown';
 
 if (require.main === module) {
-  const server = createApp().listen(config.port, () => {
+  const stopMaintenance = startMaintenance();
+  const server = createApp().listen(config.port, '0.0.0.0', () => {
     logger.info({ event: 'server_started', port: config.port });
   });
-  setupGracefulShutdown(server);
+  setupGracefulShutdown(server, 10000, async () => {
+    await stopMaintenance();
+    closeDatabase();
+  });
 }

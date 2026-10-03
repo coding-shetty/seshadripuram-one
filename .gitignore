@@ -58,3 +58,17 @@ backend/coverage/
 *.db
 *.db.bak
 *.db.old
+
+# Signing keys, sensitive backups and deployment secrets
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.db-wal
+*.db-shm
+*.db-journal
+*.db.gz
+/backups/
+.env
+.env.*
+!.env.example

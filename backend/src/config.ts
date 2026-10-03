@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { z } from 'zod';
+
 
 const knownInsecureSecrets = [
   'replace-with-a-long-random-secret',
@@ -40,8 +40,15 @@ export interface AppConfig {
   importPayloadRetentionDays: number;
 }
 
+function positiveInteger(raw: string | undefined, fallback: number, name: string, max = 2147483647): number {
+  const value = raw === undefined ? fallback : Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1 || value > max) throw new Error(`${name} must be a valid positive integer up to ${max}`);
+  return value;
+}
+
 export function validateConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConfig {
   const nodeEnv = (rawEnv.NODE_ENV ?? 'development') as 'development' | 'production' | 'test';
+  if (!['development', 'production', 'test'].includes(nodeEnv)) throw new Error('NODE_ENV must be development, production, or test');
   const isProduction = nodeEnv === 'production';
 
   const jwtSecret = rawEnv.JWT_SECRET?.trim() ?? '';
@@ -72,7 +79,7 @@ export function validateConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConf
   let smtpConfig: AppConfig['smtp'] | undefined;
   if (otpProvider === 'smtp' || otpProvider === 'gmail') {
     const host = rawEnv.SMTP_HOST?.trim() ?? (otpProvider === 'gmail' ? 'smtp.gmail.com' : '');
-    const port = Number(rawEnv.SMTP_PORT ?? (otpProvider === 'gmail' ? 465 : 587));
+    const port = positiveInteger(rawEnv.SMTP_PORT, otpProvider === 'gmail' ? 465 : 587, 'SMTP_PORT', 65535);
     const user = rawEnv.SMTP_USER?.trim() ?? '';
     const pass = rawEnv.SMTP_PASS?.trim() ?? '';
     const from = rawEnv.SMTP_FROM?.trim() || rawEnv.EMAIL_FROM?.trim() || '';
@@ -103,10 +110,17 @@ export function validateConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConf
     }
   }
 
-  const port = Number(rawEnv.PORT ?? 3000);
-  if (isNaN(port) || port <= 0) {
-    throw new Error('PORT must be a valid positive integer');
+  const port = positiveInteger(rawEnv.PORT, 3000, 'PORT', 65535);
+  for (const origin of corsOrigins) {
+    let parsed: URL;
+    try { parsed = new URL(origin); } catch { throw new Error('CORS_ORIGINS must contain valid origins'); }
+    if (parsed.origin !== origin || (isProduction && parsed.protocol !== 'https:')) {
+      throw new Error('CORS_ORIGINS must contain origins only, using HTTPS in production');
+    }
   }
+  const trustProxy = rawEnv.TRUST_PROXY?.trim() || 'false';
+  if (trustProxy === 'true') throw new Error('TRUST_PROXY=true is unsafe; configure exact proxy hops or trusted addresses');
+
 
   return {
     port,
@@ -122,17 +136,17 @@ export function validateConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConf
     emailFrom,
     smtp: smtpConfig,
     corsOrigins,
-    trustProxy: rawEnv.TRUST_PROXY?.trim() || '1',
+    trustProxy,
     rateLimits: {
-      activationMax: Number(rawEnv.RATE_LIMIT_ACTIVATION_MAX ?? 5),
-      verifyOtpMax: Number(rawEnv.RATE_LIMIT_VERIFY_OTP_MAX ?? 5),
-      loginAccountMax: Number(rawEnv.RATE_LIMIT_LOGIN_ACCOUNT_MAX ?? 10),
-      loginIpMax: Number(rawEnv.RATE_LIMIT_LOGIN_IP_MAX ?? 50),
-      refreshMax: Number(rawEnv.RATE_LIMIT_REFRESH_MAX ?? 100),
-      meMax: Number(rawEnv.RATE_LIMIT_ME_MAX ?? 200),
-      windowMs: Number(rawEnv.RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+      activationMax: positiveInteger(rawEnv.RATE_LIMIT_ACTIVATION_MAX, 5, 'RATE_LIMIT_ACTIVATION_MAX'),
+      verifyOtpMax: positiveInteger(rawEnv.RATE_LIMIT_VERIFY_OTP_MAX, 5, 'RATE_LIMIT_VERIFY_OTP_MAX'),
+      loginAccountMax: positiveInteger(rawEnv.RATE_LIMIT_LOGIN_ACCOUNT_MAX, 10, 'RATE_LIMIT_LOGIN_ACCOUNT_MAX'),
+      loginIpMax: positiveInteger(rawEnv.RATE_LIMIT_LOGIN_IP_MAX, 50, 'RATE_LIMIT_LOGIN_IP_MAX'),
+      refreshMax: positiveInteger(rawEnv.RATE_LIMIT_REFRESH_MAX, 100, 'RATE_LIMIT_REFRESH_MAX'),
+      meMax: positiveInteger(rawEnv.RATE_LIMIT_ME_MAX, 200, 'RATE_LIMIT_ME_MAX'),
+      windowMs: positiveInteger(rawEnv.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 'RATE_LIMIT_WINDOW_MS'),
     },
-    importPayloadRetentionDays: Number(rawEnv.IMPORT_PAYLOAD_RETENTION_DAYS ?? 7),
+    importPayloadRetentionDays: positiveInteger(rawEnv.IMPORT_PAYLOAD_RETENTION_DAYS, 7, 'IMPORT_PAYLOAD_RETENTION_DAYS', 365),
   };
 }
 

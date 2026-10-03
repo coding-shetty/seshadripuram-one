@@ -48,6 +48,8 @@ describe('Role boundaries & authorization matrix across all protected endpoints'
       { id: 'user-adm', role: 'ADMIN', institutionId: 'A-ROLE', contactEmail: 'adm@role.edu', accountStatus: 'ACTIVE' },
     ]);
 
+    await db.update(users).set({ collegeId: 'INST-ROLE' });
+
     await db.insert(students).values({
       id: 'prof-stu',
       userId: 'user-stu',

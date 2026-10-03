@@ -49,6 +49,8 @@ describe('Data Integrity, Mass Assignment, Pagination, and Security Auditing', (
       { id: 'student-sec-user', role: 'STUDENT', institutionId: 'S-SEC', contactEmail: 'student@sec.edu', accountStatus: 'PRE_PROVISIONED' },
     ]);
 
+    await db.update(users).set({ collegeId: 'INST-SEC' });
+
     await db.insert(teachers).values({
       id: 'prof-teacher-sec',
       userId: 'teacher-sec-user',
