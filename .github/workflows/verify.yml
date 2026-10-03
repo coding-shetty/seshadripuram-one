@@ -56,7 +56,6 @@ jobs:
     timeout-minutes: 25
     env:
       ANDROID_APPLICATION_ID: org.example.ci.seshadripuram
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/ci-only.jks
       ANDROID_KEYSTORE_PASSWORD: ci-only-not-production
       ANDROID_KEY_ALIAS: ci-only
       ANDROID_KEY_PASSWORD: ci-only-not-production
@@ -73,6 +72,8 @@ jobs:
           cache: true
       - name: Generate disposable CI signing key (never distribute this build)
         run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/ci-only.jks"
+          echo "ANDROID_KEYSTORE_PATH=$ANDROID_KEYSTORE_PATH" >> "$GITHUB_ENV"
           keytool -genkeypair -noprompt -keystore "$ANDROID_KEYSTORE_PATH" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" \
             -keypass "$ANDROID_KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 1 \
