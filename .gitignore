@@ -54,3 +54,6 @@ backend/coverage/
 
 # Allow example environment configuration
 !backend/.env.example
+
+backend/*.db.bak
+backend/*.db.old

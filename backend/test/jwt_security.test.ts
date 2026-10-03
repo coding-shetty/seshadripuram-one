@@ -69,7 +69,7 @@ describe('JWT Security & Cryptographic Verification', () => {
 
       // Tamper with the signature portion (change last 4 characters)
       const parts = validToken.split('.');
-      const tamperedSignature = parts[2].slice(0, -4) + 'WXYZ';
+      const tamperedSignature = (parts[2] ?? '').slice(0, -4) + 'WXYZ';
       const tamperedToken = `${parts[0]}.${parts[1]}.${tamperedSignature}`;
 
       const res = await request(app)

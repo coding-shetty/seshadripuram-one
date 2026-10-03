@@ -6,10 +6,13 @@ import { activationGrants, announcements, authSessions, importJobs, students, te
 import { createApp } from '../src/index';
 import { createAccessToken } from '../src/services/tokenService';
 
+import { assertSafeCleanup } from './helpers/cleanDb';
+
 const app = createApp();
 
 describe('backend reliability & error handling', () => {
   async function cleanup() {
+    assertSafeCleanup();
     await db.delete(authSessions);
     await db.delete(activationGrants);
     await db.delete(announcements);
