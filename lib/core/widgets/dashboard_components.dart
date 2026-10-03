@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/user_role.dart';
 import '../../features/auth/presentation/auth_providers.dart';
+import '../config/app_config.dart';
 import '../theme/app_theme.dart';
 
 class DashboardShell extends ConsumerWidget {
@@ -68,21 +69,26 @@ class DashboardShell extends ConsumerWidget {
           ? NavigationBar(
               selectedIndex: 0,
               onDestinationSelected: (index) {
+                final user = ref.read(currentUserProvider);
                 if (index == 0) {
-                  // Currently on home dashboard
+                  if (user != null) {
+                    final target = switch (user.role) {
+                      UserRole.student => '/student/dashboard',
+                      UserRole.teacher => '/teacher/dashboard',
+                      UserRole.admin => '/admin/dashboard',
+                    };
+                    context.go(target);
+                  }
                 } else if (index == 1) {
-                  final user = ref.read(currentUserProvider);
                   if (user?.role == UserRole.student) {
                     context.push('/student/timetable');
+                  } else if (user?.role == UserRole.teacher) {
+                    context.push('/teacher/timetable');
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Schedule coming soon')),
-                    );
+                    context.push('/admin/structure');
                   }
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('More options coming soon')),
-                  );
+                  showAppSettingsDialog(context, ref);
                 }
               },
               destinations: const [
@@ -132,10 +138,10 @@ class _NavigationRail extends ConsumerWidget {
               final user = ref.read(currentUserProvider);
               if (user?.role == UserRole.student) {
                 context.push('/student/timetable');
+              } else if (user?.role == UserRole.teacher) {
+                context.push('/teacher/timetable');
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Schedule coming soon')),
-                );
+                context.push('/admin/structure');
               }
             },
           ),
@@ -144,20 +150,21 @@ class _NavigationRail extends ConsumerWidget {
             icon: const Icon(Icons.notifications_none, color: Colors.white70),
             tooltip: 'Notifications',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notifications coming soon')),
-              );
+              final user = ref.read(currentUserProvider);
+              if (user?.role == UserRole.student) {
+                context.push('/student/announcements');
+              } else if (user?.role == UserRole.teacher) {
+                context.push('/teacher/announcements');
+              } else {
+                context.push('/admin/audit-logs');
+              }
             },
           ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white70),
             tooltip: 'Settings',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings coming soon')),
-              );
-            },
+            onPressed: () => showAppSettingsDialog(context, ref),
           ),
           const SizedBox(height: 12),
           IconButton(
@@ -170,6 +177,61 @@ class _NavigationRail extends ConsumerWidget {
       ),
     );
   }
+}
+
+void showAppSettingsDialog(BuildContext context, WidgetRef ref) {
+  final user = ref.read(currentUserProvider);
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.settings_outlined, color: AppColors.gold500),
+          SizedBox(width: 8),
+          Text('Preferences & Profile'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.person_outline),
+            title: Text(user?.name.isNotEmpty == true ? user!.name : 'User'),
+            subtitle: Text('ID: ${user?.institutionId ?? "--"} • Role: ${user?.role.name.toUpperCase()}'),
+          ),
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('Backend API Server'),
+            subtitle: Text(AppConfig.baseUrl),
+          ),
+          const ListTile(
+            dense: true,
+            leading: Icon(Icons.verified_outlined),
+            title: Text('Version'),
+            subtitle: Text('Seshadripuram One v1.0.0 (Production Build)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Close'),
+        ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          onPressed: () {
+            Navigator.of(ctx).pop();
+            ref.read(authRepositoryProvider).logout();
+          },
+          icon: const Icon(Icons.logout, size: 18),
+          label: const Text('Logout'),
+        ),
+      ],
+    ),
+  );
 }
 
 class LogoutButton extends ConsumerWidget {
@@ -335,28 +397,49 @@ class DashboardSection extends StatelessWidget {
 }
 
 class StatCard extends StatelessWidget {
-  const StatCard({required this.label, required this.value, required this.icon, this.accent = AppColors.navy800, super.key});
+  const StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.accent = AppColors.navy800,
+    this.onTap,
+    super.key,
+  });
 
   final String label;
   final String value;
   final IconData icon;
   final Color accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppRadii.sm)),
-              child: Icon(icon, color: accent),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: Theme.of(context).textTheme.titleLarge), Text(label, style: Theme.of(context).textTheme.bodySmall)])),
-          ],
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppRadii.sm)),
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(value, style: Theme.of(context).textTheme.titleLarge),
+                    Text(label, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

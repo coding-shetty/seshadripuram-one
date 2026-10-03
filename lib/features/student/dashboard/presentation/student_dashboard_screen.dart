@@ -32,11 +32,7 @@ class StudentDashboardScreen extends ConsumerWidget {
       subtitle: roleSubtitle,
       actions: [
         IconButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications coming soon')),
-            );
-          },
+          onPressed: () => context.push('/student/announcements'),
           icon: const Icon(Icons.notifications_none),
           tooltip: 'Notifications',
         ),
@@ -59,10 +55,29 @@ class StudentDashboardScreen extends ConsumerWidget {
                   value: attendanceValue,
                   icon: Icons.event_available,
                   accent: AppColors.success,
+                  onTap: () => context.push('/student/attendance'),
                 ),
               ),
-              const SizedBox(width: 180, child: StatCard(label: 'Next deadline (Demo data)', value: '2 days', icon: Icons.schedule, accent: AppColors.warning)),
-              const SizedBox(width: 180, child: StatCard(label: 'Unread notices (Demo data)', value: '4', icon: Icons.notifications_active_outlined, accent: AppColors.gold500)),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Full Timetable',
+                  value: 'Live',
+                  icon: Icons.schedule,
+                  accent: AppColors.warning,
+                  onTap: () => context.push('/student/timetable'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: StatCard(
+                  label: 'Announcements',
+                  value: 'Notices',
+                  icon: Icons.notifications_active_outlined,
+                  accent: AppColors.gold500,
+                  onTap: () => context.push('/student/announcements'),
+                ),
+              ),
             ],
           );
           const schedule = LiveTimetableSection(limit: 2);

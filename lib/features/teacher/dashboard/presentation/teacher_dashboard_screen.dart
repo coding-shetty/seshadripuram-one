@@ -24,11 +24,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
       subtitle: roleSubtitle,
       actions: [
         IconButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications are up to date')),
-            );
-          },
+          onPressed: () => context.push('/teacher/announcements'),
           icon: const Icon(Icons.notifications_none),
           tooltip: 'Notifications',
         ),
@@ -66,15 +62,17 @@ class TeacherDashboardScreen extends ConsumerWidget {
                   value: '${classes.length}',
                   icon: Icons.class_outlined,
                   accent: AppColors.gold500,
+                  onTap: () => context.push('/teacher/timetable'),
                 ),
               ),
-              const SizedBox(
+              SizedBox(
                 width: 180,
                 child: StatCard(
                   label: 'Attendance status',
                   value: 'Live',
                   icon: Icons.fact_check_outlined,
                   accent: AppColors.success,
+                  onTap: () => context.push('/teacher/attendance'),
                 ),
               ),
             ],
