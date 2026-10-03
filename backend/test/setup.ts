@@ -3,11 +3,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll } from 'vitest';
-import { createClient } from '@libsql/client';
-import { drizzle } from 'drizzle-orm/libsql';
-import { migrate } from 'drizzle-orm/libsql/migrator';
-import { assertTestDatabase } from '../src/db/testGuard';
+import { assertTestDatabaseSafe } from '../src/db/guard';
 import { closeDatabase, setTestDatabaseUrl } from '../src/db';
+import { applyTestMigrations } from './helpers/testDb';
 
 const tempDbPath = path.join(os.tmpdir(), `seshadripuram-${randomUUID()}.test.db`);
 const tempDbUrl = `file:${tempDbPath}`;
@@ -15,18 +13,13 @@ const tempDbUrl = `file:${tempDbPath}`;
 // Set env immediately so early module loads in this test file use this unique DB
 process.env.NODE_ENV = 'test';
 process.env.TURSO_DATABASE_URL = tempDbUrl;
-assertTestDatabase(tempDbUrl, 'test');
+assertTestDatabaseSafe(tempDbUrl);
 
 beforeAll(async () => {
-  assertTestDatabase(tempDbUrl, 'test');
+  assertTestDatabaseSafe(tempDbUrl);
 
   // Programmatically apply real migration files from src/db/migrations
-  const migratorClient = createClient({ url: tempDbUrl });
-  const migratorDb = drizzle(migratorClient);
-  await migrate(migratorDb, {
-    migrationsFolder: path.resolve(__dirname, '../src/db/migrations'),
-  });
-  migratorClient.close();
+  await applyTestMigrations(tempDbUrl);
 
   // Point the app db proxy to this isolated, migrated DB
   setTestDatabaseUrl(tempDbUrl);

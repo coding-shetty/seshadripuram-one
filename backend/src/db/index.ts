@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createClient, type Client } from "@libsql/client";
 import * as schema from "./schema";
 import * as dotenv from "dotenv";
-import { assertTestDatabase } from "./testGuard";
+import { assertTestDatabaseSafe } from "./guard";
 
 if (process.env.NODE_ENV !== "test") {
   dotenv.config();
@@ -11,7 +11,7 @@ if (process.env.NODE_ENV !== "test") {
 function resolveInitialUrl(): string {
   const url = process.env.TURSO_DATABASE_URL || "file:./local.db";
   if (process.env.NODE_ENV === "test") {
-    assertTestDatabase(url, process.env.NODE_ENV);
+    assertTestDatabaseSafe(url);
   }
   return url;
 }
@@ -28,7 +28,7 @@ export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
 });
 
 export function setTestDatabaseUrl(newUrl: string): void {
-  assertTestDatabase(newUrl, process.env.NODE_ENV || "test");
+  assertTestDatabaseSafe(newUrl);
   try {
     client.close();
   } catch {

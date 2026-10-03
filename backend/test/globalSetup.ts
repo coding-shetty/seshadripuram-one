@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { assertTestDatabase } from '../src/db/testGuard';
+import { assertTestDatabaseSafe } from '../src/db/guard';
 
 export default function setup() {
   process.env.NODE_ENV = 'test';
@@ -12,5 +12,5 @@ export default function setup() {
   }
 
   // Hard guard: abort immediately if anything points to a non-test database
-  assertTestDatabase(process.env.TURSO_DATABASE_URL, 'test');
+  assertTestDatabaseSafe(process.env.TURSO_DATABASE_URL);
 }
