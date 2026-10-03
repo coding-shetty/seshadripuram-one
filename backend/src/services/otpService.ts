@@ -54,7 +54,7 @@ export class SmtpOtpService implements OtpService {
   }
 }
 
-class ConsoleOtpService implements OtpService {
+export class ConsoleOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -65,7 +65,7 @@ class ConsoleOtpService implements OtpService {
   }
 }
 
-class ResendOtpService implements OtpService {
+export class ResendOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -99,7 +99,7 @@ class ResendOtpService implements OtpService {
   }
 }
 
-class DisabledOtpService implements OtpService {
+export class DisabledOtpService implements OtpService {
   generateOtp(): string {
     return randomInt(100000, 1000000).toString();
   }
@@ -109,11 +109,15 @@ class DisabledOtpService implements OtpService {
   }
 }
 
-export function createOtpService(): OtpService {
-  if (config.otpProvider === 'console' && !config.isProduction) return new ConsoleOtpService();
-  if (config.otpProvider === 'resend') return new ResendOtpService();
-  if ((config.otpProvider === 'smtp' || config.otpProvider === 'gmail') && config.smtp) {
-    return new SmtpOtpService(config.smtp);
+export function createOtpService(activeConfig: {
+  otpProvider?: string | undefined;
+  isProduction?: boolean | undefined;
+  smtp?: SmtpConfig | undefined;
+} = config): OtpService {
+  if (activeConfig.otpProvider === 'console' && !activeConfig.isProduction) return new ConsoleOtpService();
+  if (activeConfig.otpProvider === 'resend') return new ResendOtpService();
+  if ((activeConfig.otpProvider === 'smtp' || activeConfig.otpProvider === 'gmail') && activeConfig.smtp) {
+    return new SmtpOtpService(activeConfig.smtp);
   }
   return new DisabledOtpService();
 }
