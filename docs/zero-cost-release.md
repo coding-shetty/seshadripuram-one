@@ -48,7 +48,9 @@ flutter test
 ```
 
 The CI web build uses `https://api.example.invalid` **only as a compilation check**.
-Never distribute that build as a working application.
+Never distribute that build as a working application. The Android CI release check
+also uses that invalid API host and a disposable CI-only key. It deletes the APK
+and key rather than publishing them; it is not a production-signed release.
 
 ## 2. Configure an isolated staging environment
 

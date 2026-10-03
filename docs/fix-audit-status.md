@@ -44,12 +44,14 @@ Do not deploy official records until the deployment gates below are signed off.
 - Migration drift check passed; tests apply real migration files to isolated DBs.
 - npm audit: zero reported vulnerabilities, including development dependencies.
 - Python backup/restore: 3 tests passed (round trip, corrupt DB, missing source).
-- Flutter SDK bootstrap was attempted but the Dart SDK download from Google
-  storage failed in this sandbox. Flutter analysis/tests/build require CI results.
+- Flutter 3.44.2 CI: enforced lockfile resolution, analysis, tests and release-web
+  compilation passed. Local SDK download was blocked; CI provided verification.
+- Synthetic CLI smoke: migrations applied twice, admin bootstrap, backup and restore
+  succeeded without real credentials or student records.
 - No production database, email account, signing key or live deployment was used.
 
-Tests and audit results are evidence, not guarantees. CLI scripts and platform
-release packaging need staging smoke tests. Remote Turso concurrency must also be
+Tests and audit results are evidence, not guarantees. Platform release packaging and deployment-specific CLI configuration still
+need staging smoke tests. Remote Turso concurrency must also be
 exercised on the chosen hosting configuration; local libSQL tests are not a load test.
 
 ## Required migration procedure
@@ -67,7 +69,7 @@ backfill either from arbitrary IDs or grant global access as a compatibility fix
 
 ## Gates still open — do not mark them complete just because CI is green
 
-- [ ] Flutter analysis, unit/widget tests and release-web compilation pass in CI.
+- [x] Flutter analysis, unit/widget tests and release-web compilation pass in CI.
 - [ ] Signed APK installed on a real device; release API, login, refresh, attendance
       submission, logout and offline/reconnect checked end to end.
 - [ ] College-approved data mapping and an isolated staging migration rehearsal.

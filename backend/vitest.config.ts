@@ -11,6 +11,7 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/db/seed.ts', 'src/scripts/**'],
       reporter: ['text', 'json-summary', 'html'],
+      thresholds: { lines: 80, statements: 80, branches: 65, functions: 65 },
     },
     env: {
       NODE_ENV: 'test',
