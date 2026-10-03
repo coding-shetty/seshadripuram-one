@@ -23,7 +23,8 @@ gradle.taskGraph.whenReady {
 
 android {
     namespace = "com.example.seshadripuram_one"
-    compileSdk = flutter.compileSdkVersion
+    // Native dependencies require API 37; AGP/Gradle are pinned alongside it.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
