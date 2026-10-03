@@ -44,17 +44,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         constraints: const BoxConstraints(maxWidth: 420),
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Sign in', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 16),
-            TextField(controller: _idController, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'College, student, or employee ID')),
-            const SizedBox(height: 12),
-            TextField(controller: _passwordController, obscureText: true, onSubmitted: (_) => _loading ? null : _login(), decoration: const InputDecoration(labelText: 'Password')),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _loading ? null : _login, child: Text(_loading ? 'Signing in…' : 'Sign in')),
-            TextButton(onPressed: _loading ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActivationScreen())), child: const Text('Activate your college account')),
-          ]),
+          child: AutofillGroup(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Sign in', style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _idController,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.username],
+                decoration: const InputDecoration(labelText: 'College, student, or employee ID'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                autofillHints: const [AutofillHints.password],
+                onSubmitted: (_) => _loading ? null : _login(),
+                decoration: const InputDecoration(labelText: 'Password'),
+              ),
+              if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              const SizedBox(height: 20),
+              FilledButton(onPressed: _loading ? null : _login, child: Text(_loading ? 'Signing in…' : 'Sign in')),
+              TextButton(onPressed: _loading ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActivationScreen())), child: const Text('Activate your college account')),
+            ]),
+          ),
         ),
       ),
     ),
@@ -115,16 +128,36 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
         constraints: const BoxConstraints(maxWidth: 420),
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(labels[_step], style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 16),
-            if (_step == 0) TextField(controller: _idController, decoration: const InputDecoration(labelText: 'College, student, or employee ID')),
-            if (_step == 1) TextField(controller: _otpController, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: 'Six-digit OTP')),
-            if (_step == 2) TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'Password (at least 12 characters)')),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _loading ? null : _continue, child: Text(_loading ? 'Please wait…' : _step == 2 ? 'Activate account' : 'Continue')),
-          ]),
+          child: AutofillGroup(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(labels[_step], style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 16),
+              if (_step == 0)
+                TextField(
+                  controller: _idController,
+                  autofillHints: const [AutofillHints.username],
+                  decoration: const InputDecoration(labelText: 'College, student, or employee ID'),
+                ),
+              if (_step == 1)
+                TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  autofillHints: const [AutofillHints.oneTimeCode],
+                  decoration: const InputDecoration(labelText: 'Six-digit OTP'),
+                ),
+              if (_step == 2)
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.newPassword],
+                  decoration: const InputDecoration(labelText: 'Password (at least 12 characters)'),
+                ),
+              if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              const SizedBox(height: 20),
+              FilledButton(onPressed: _loading ? null : _continue, child: Text(_loading ? 'Please wait…' : _step == 2 ? 'Activate account' : 'Continue')),
+            ]),
+          ),
         ),
       )),
     );
