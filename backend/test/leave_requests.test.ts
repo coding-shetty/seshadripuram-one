@@ -57,8 +57,8 @@ describe('Student Leave & On-Duty (OD) Workflow', () => {
       id: instId,
       name: 'Seshadripuram College Main',
       code: 'SCM-LEAVE',
-      address: 'Seshadripuram, Bengaluru',
-      status: 'ACTIVE',
+      city: 'Bengaluru',
+      isActive: true,
     });
 
     const ayId = 'ay-2026-leave';
@@ -183,7 +183,7 @@ describe('Student Leave & On-Duty (OD) Workflow', () => {
     // Verify audit log
     const logs = await db.select().from(auditLogs).where(eq(auditLogs.action, 'LEAVE_REQUESTED'));
     expect(logs.length).toBe(1);
-    expect(logs[0].details).toContain('ON_DUTY_SPORTS');
+    expect(logs[0]?.details).toContain('ON_DUTY_SPORTS');
   });
 
   it('rejects leave requests with invalid dates or too short reason', async () => {
@@ -284,7 +284,7 @@ describe('Student Leave & On-Duty (OD) Workflow', () => {
     // Verify audit
     const logs = await db.select().from(auditLogs).where(eq(auditLogs.action, 'LEAVE_REVIEWED'));
     expect(logs.length).toBe(1);
-    expect(logs[0].details).toContain('APPROVED');
+    expect(logs[0]?.details).toContain('APPROVED');
   });
 
   it('includes approved leaves count in student attendance endpoint', async () => {

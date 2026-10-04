@@ -1278,8 +1278,7 @@ academicRouter.post('/leave-requests', requireAuthentication, requireRole('STUDE
       id: randomUUID(),
       collegeId: ctx.institutionId,
       action: 'LEAVE_REQUESTED',
-      details: `Student applied for ${leaveType} from ${startDate} to ${endDate}`,
-      actorUserId: req.auth!.sub,
+      details: `Student applied for ${leaveType} from ${startDate} to ${endDate} by user ${req.auth!.sub}`,
     });
   }
 
@@ -1427,8 +1426,7 @@ academicRouter.patch('/leave-requests/:id/review', requireAuthentication, requir
       id: randomUUID(),
       collegeId: ctx.institutionId,
       action: 'LEAVE_REVIEWED',
-      details: `${req.auth!.role} marked leave request ${leaveId} as ${status}`,
-      actorUserId: req.auth!.sub,
+      details: `${req.auth!.role} marked leave request ${leaveId} as ${status} (actor: ${req.auth!.sub})`,
     });
   }
 
